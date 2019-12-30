@@ -188,7 +188,7 @@ Int_t firstMacro(){
   const Int_t derivativeCalcWindowSize = 5;
   const Int_t estimatedWidth = 9.; //estimated width of the track's beginning rising edge at high TimeBicket
   const Int_t pointOfPeakRejection = 75;
-  const Int_t PULSE = 0;///!\ 11602;  // 14030->60; /!\ 14030 & 14041 & 14048 & 14053(noDipBelow); /!\ 14031 & 14032 & 14052 (1TAC2Peak) 14078 (1TAC3peaks); /!\ 4041 & 14056 (weirdMCP) /!\ 14030 & 14053 & 14059 (singleShort)
+  const Int_t EVENT = 0;///!\ 11602;  // 14030->60; /!\ 14030 & 14041 & 14048 & 14053(noDipBelow); /!\ 14031 & 14032 & 14052 (1TAC2Peak) 14078 (1TAC3peaks); /!\ 4041 & 14056 (weirdMCP) /!\ 14030 & 14053 & 14059 (singleShort)
   char eRrOr;
   const Float_t meanBeamPeakHeight = 253.5;
   const Float_t meanBeamCharge = 11259.5;
@@ -392,7 +392,7 @@ Int_t firstMacro(){
     
     //Recursively go through tree, getting "Fill" after "Fill"findDerivative
     
-    for (Int_t i=PULSE; i</*PULSE+50*/tree->GetEntries(); i++){
+    for (Int_t i=EVENT; i</*EVENT+50*/tree->GetEntries(); i++){
         tree->GetEntry(i);
         cout<<"\nEvent #"<<i<<", num_hits : "<<num_hits<<endl<<endl;
         if (num_hits > 100){cout<<"\nWARNING, event "<<i<<"has too many entries.";globalNumberErrors++;}//TODO add error handeling
