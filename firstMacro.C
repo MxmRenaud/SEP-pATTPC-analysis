@@ -166,7 +166,7 @@ Int_t firstMacro(){
     bool fillIndividualChannels = false;
     bool realignTracks = true;
     bool acceptPeaksBelowBeam = false; // do you want to keep events that peak much further than the primary beam ? see 'pointOfPeakRejection' Will exclude most events that are just noise and some disintegration events.
-    bool useFusionGates = false;
+    bool useFusionGates = true; //attempt to only keep events fulfilling certain conditions [hard-coded atm]
     bool substractBckgrd = false;
     bool beQuite = true; //limits terminal output
     
@@ -179,6 +179,7 @@ Int_t firstMacro(){
     bool drawLengthVpeakHeight = true;
     bool drawLengthVtrackCharge = true;
     bool drawLengthVbackgrd = true;
+    bool drawLengthVtac = true;
     
     bool saveHistograms = false;
 //     string savePath = "/home/mrenaud1/Documents/Li8Analysis/requestedGraphs/"; //TODO fix later
@@ -241,9 +242,9 @@ Int_t firstMacro(){
   
   const int numberOfEnergies = 16;
   float fusionCharac[numberOfEnergies][4];
-  fstream characStream("ExpPrep/signal-Li8Ar40to48Sc.dat");
+  fstream characStream("../ExpPrep/signal-Li8Ar40to48Sc.dat");
   line = 0;
-  if (useFusionGates && characStream.is_open()){
+  if (useFusionGates && characStream.is_open()){//energy[kev], charge[% of BeamE], peakHeight[factor*beam bragg peak], dist travelled [estim., mm]
       while (characStream>>fusionCharac[line][0]>>fusionCharac[line][1]>>fusionCharac[line][2]>>fusionCharac[line][3]){
           if (line == numberOfEnergies){
               cout<<"\n\nWARNING !\nMore lines in the 'characStream' than space in the 'fusionCharac' matrix, there are.\nFucked up, you have.\nFix it, you should.\n";
@@ -462,7 +463,7 @@ Int_t firstMacro(){
             if (beQuite != 1) cout<<"Watch : "<<daPeak[0]<<"\t"<<daPeak[1]<<"\t"<<daPeak[2]<<endl;
             for (int j=0;j<pileUpInEvent+2;j++){
                 if (daPeak[j] >=1 && daPeak[j] <= 513){doubleCheckPU++;}
-                else if (daPeak[j] >= 513){daPeakElement++;}//the peak you want is then behind a ludicrously high number, so go fetch next entry, not the first -> daPeak[daPeakElement] instead of daPeak[0]
+                else if (daPeak[j] >= 513){daPeakElement++;}//if you're here the real peak you wantnot the first, so go fetch next entry, not the first "peak" -> daPeak[daPeakElement] instead of daPeak[0]
             }
             
             //Double-check pileUp
@@ -525,21 +526,26 @@ Int_t firstMacro(){
                             temp[1] = 5.;
                             for (int bin=0;bin<40;bin++){
                                 if (temp[0] >= findDerivative(preTBF,daPeak[daPeakElement]+(p+1)*5-20+bin,3)){
-                                    maxDerivativePosition[0]=daPeak[daPeakElement]+(p+1)*5-20+bin;
-                                    temp[0] = findDerivative(preTBF,daPeak[daPeakElement]+(p+1)*5-20+bin,3);
+                                    maxDerivativePosition[0]=daPeak[daPeakElement]+(p+1)*5-20+bin; //(peak position)+(to reconstruct position of beginning track)+(-20+bin: scan that passage. Thus, here, find position of max derivative -> start track)
+                                    temp[0] = findDerivative(preTBF,daPeak[daPeakElement]+(p+1)*5-20+bin,3); //store derivative
                                 }
                                 if (temp[1] < findDerivative(preTBF,(int)daPeak[daPeakElement]-40+bin,3)){
-                                    maxDerivativePosition[1]=(int)daPeak[daPeakElement]-40+bin;
-                                    temp[1] = 1000000.;
+                                    maxDerivativePosition[1]=(int)daPeak[daPeakElement]-40+bin; //find end of track
+                                    temp[1] = 1000000.; //break
                                 }
                             }
-                            if (beQuite != 1) cout<<"\nmaxDerivativePosition[0] = "<<maxDerivativePosition[0]<<", maxDerivativePosition[1] = "<<maxDerivativePosition[1]<<endl;
-                            if (drawLengthVbackgrd) lengthVbackground->Fill(maxDerivativePosition[0]+estimatedWidth-maxDerivativePosition[1],temp[2]);
+                            if (beQuite != 1) cout<<"\nmaxDerivativePosition[0] = "<<maxDerivativePosition[0]<<", maxDerivativePosition[1] = "<<maxDerivativePosition[1]<<endl; //respectively position of start and end of track
+                            if (drawLengthVbackgrd) lengthVbackground->Fill(maxDerivativePosition[0]+estimatedWidth-maxDerivativePosition[1],temp[2]); //temp[2] holds the background/baseline
                             if (drawLengthVpeakHeight){
                                 if (useFusionGates == false){lengthVSheight->Fill((maxDerivativePosition[0]+estimatedWidth-maxDerivativePosition[1]),preTBF->GetMaximum());}
                                 else {
                                     for (line=15;line>=0;line--){
-                                        if ((maxDerivativePosition[0]+estimatedWidth-maxDerivativePosition[1]) <= fusionCharac[line][3]/(driftV*timeBucketSize)){fusionTestValidated = 1;temp[0] = preTBF->Integral(maxDerivativePosition[1],maxDerivativePosition[0]+estimatedWidth,"");break;}
+                                        if ((maxDerivativePosition[0]+estimatedWidth-maxDerivativePosition[1]) <= fusionCharac[line][3]/(driftV*timeBucketSize)){
+                                            fusionTestValidated = 1;
+                                            temp[0] = preTBF->Integral(maxDerivativePosition[1],maxDerivativePosition[0]+estimatedWidth,"");
+                                            cout<<temp[0]<<"\t"<<92.545455*(maxDerivativePosition[0]+estimatedWidth-maxDerivativePosition[1])-755.81819<<endl;
+                                            return 0;
+                                        }
                                         globalNumberOfLongEvents++;
                                     }
                                     //current condition : >=90% of calculated peak height, and <=110% of calculated charge
