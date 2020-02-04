@@ -174,7 +174,8 @@ Int_t firstMacro(){
     
 //END---------WHAT DO Y0U WISH TO DO HERE, MORTAL ? -------------------
     
-    bool runOnTheCRC = false; //deactivates mandatory user input & adapt file paths NOTE not optimal for the latter part. 
+    bool runOnTheCRC = true; //deactivates mandatory user input & adapt file paths NOTE not optimal for the latter part.
+    bool multiRunAnalysis = true; //select between two file, 'list-preAnal.txt' and 'list-analysis.txt', for convenience in swtching between debugging/actual run
     
     bool fillIndividualChannels = false;
     bool realignTracks = true; //BEST TRACK LENGTH FINDING ALGORYTHM IS LOCKED IN HERE, as well
@@ -195,7 +196,7 @@ Int_t firstMacro(){
     bool drawLengthVbackgrd = true;
     bool drawLengthVtac = true;
     bool drawChargeVtac = true;
-    bool drawPeakHeightVtac = false;
+    bool drawPeakHeightVtac = true;
     bool drawChargeVpeakHeight = true;
     bool draw3DTrack = false; //WARNING please only one event at a time
     
@@ -208,7 +209,7 @@ Int_t firstMacro(){
   const Int_t derivativeCalcWindowSize = 5;
   const Int_t estimatedWidth = 9.; //estimated width of the track's beginning rising edge at high TimeBicket
   const Int_t pointOfPeakRejection = 75;
-  const Int_t EVENT = 7;//run_0090/!\ 11602;  // 14030->60; /!\ 14030 & 14041 & 14048 & 14053(noDipBelow); /!\ 14031 & 14032 & 14052 (1TAC2Peak) 14078 (1TAC3peaks); /!\ 4041 & 14056 (weirdMCP) /!\ 14030 & 14053 & 14059 (singleShort)
+  const Int_t EVENT = 0;//run_0090/!\ 11602;  // 14030->60; /!\ 14030 & 14041 & 14048 & 14053(noDipBelow); /!\ 14031 & 14032 & 14052 (1TAC2Peak) 14078 (1TAC3peaks); /!\ 4041 & 14056 (weirdMCP) /!\ 14030 & 14053 & 14059 (singleShort)
   char eRrOr;
   const Float_t meanBeamPeakHeight = 256.5;//EDIT value on 02/04, prev.: 253.5;
   const Float_t meanBeamCharge = 12095.5;//EDIT value on 02/04, prev.: 11259.5;
@@ -252,7 +253,7 @@ Int_t firstMacro(){
   const char *fMapStreamChar;
   string fStreamName;
   int line = 0;
-  if (runOnTheCRC == true){fStreamName = "/afs/crc.nd.edu/user/m/mrenaud1/Public/TPC-SEP2019-fullMap.dat";}
+  if (runOnTheCRC == true){fStreamName = "/afs/crc.nd.edu/user/m/mrenaud1/Public/SEP-pATTPC-analysis/TPC-SEP2019-fullMap.dat";}
   else{fStreamName = "TPC-SEP2019-fullMap.dat";}
   fMapStreamChar = fStreamName.c_str(); //WARNING http://www.cplusplus.com/forum/general/100714/
   fstream mapStream(fMapStreamChar);
@@ -273,7 +274,7 @@ Int_t firstMacro(){
   const int numberOfEnergies = 16;
   float fusionCharac[numberOfEnergies][4];
   const char *fCharacStreamChar;
-  if (runOnTheCRC == true){fStreamName = "/afs/crc.nd.edu/user/m/mrenaud1/Public/signal-Li8Ar40to48Sc.dat";}
+  if (runOnTheCRC == true){fStreamName = "/afs/crc.nd.edu/user/m/mrenaud1/Public/SEP-pATTPC-analysis/signal-Li8Ar40to48Sc.dat";}
   else{fStreamName = "../ExpPrep/signal-Li8Ar40to48Sc.dat";}
   fCharacStreamChar = fStreamName.c_str(); //WARNING http://www.cplusplus.com/forum/general/100714/
   fstream characStream(fCharacStreamChar);
@@ -296,8 +297,18 @@ Int_t firstMacro(){
 
   
   //Definition of objects
-//   ifstream List("list-preAnal.txt");
-  ifstream List("list-analysis.txt");
+  const char *fListChar;
+  if (runOnTheCRC == true){
+	if (multiRunAnalysis == false) {fStreamName = "/afs/crc.nd.edu/user/m/mrenaud1/Public/SEP-pATTPC-analysis/list-preAnal.txt";}
+	else {fStreamName = "/afs/crc.nd.edu/user/m/mrenaud1/Public/SEP-pATTPC-analysis/list-analysis.txt";}
+  }
+  else{
+	if (multiRunAnalysis) {fStreamName = "list-preAnal.txt";}
+	else {fStreamName = "list-analysis.txt";}
+  }
+  fListChar = fStreamName.c_str(); //WARNING http://www.cplusplus.com/forum/general/100714/
+  ifstream List(fListChar);
+
 
   string WhichFile;
   const char *FileName;
