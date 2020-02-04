@@ -177,7 +177,7 @@ Int_t firstMacro(){
     bool runOnTheCRC = false; //deactivates mandatory user input & adapt file paths NOTE not optimal for the latter part. 
     
     bool fillIndividualChannels = false;
-    bool realignTracks = true; //best track length finding algorythm is in here, as well
+    bool realignTracks = true; //BEST TRACK LENGTH FINDING ALGORYTHM IS LOCKED IN HERE, as well
     bool acceptPeaksBelowBeam = false; // do you want to keep events that peak much further than the primary beam ? see 'pointOfPeakRejection' Will exclude most events that are just noise and some disintegration events.
     bool useFusionGates = false; //attempt to only keep events fulfilling certain conditions [hard-coded atm]
     bool substractBckgrd = true;
@@ -192,10 +192,12 @@ Int_t firstMacro(){
     bool drawDerivatives = false; //only one event at a time
     bool drawLengthVpeakHeight = true;
     bool drawLengthVtrackCharge = true;
-    bool drawLengthVbackgrd = false;
-    bool drawLengthVtac = false;
-    bool drawChargeVtac = false;
+    bool drawLengthVbackgrd = true;
+    bool drawLengthVtac = true;
+    bool drawChargeVtac = true;
     bool drawPeakHeightVtac = false;
+    bool drawChargeVpeakHeight = true;
+    bool draw3DTrack = false; //WARNING please only one event at a time
     
     bool saveHistograms = true;
     
@@ -206,12 +208,15 @@ Int_t firstMacro(){
   const Int_t derivativeCalcWindowSize = 5;
   const Int_t estimatedWidth = 9.; //estimated width of the track's beginning rising edge at high TimeBicket
   const Int_t pointOfPeakRejection = 75;
-  const Int_t EVENT = 14048;//run_0090/!\ 11602;  // 14030->60; /!\ 14030 & 14041 & 14048 & 14053(noDipBelow); /!\ 14031 & 14032 & 14052 (1TAC2Peak) 14078 (1TAC3peaks); /!\ 4041 & 14056 (weirdMCP) /!\ 14030 & 14053 & 14059 (singleShort)
+  const Int_t EVENT = 7;//run_0090/!\ 11602;  // 14030->60; /!\ 14030 & 14041 & 14048 & 14053(noDipBelow); /!\ 14031 & 14032 & 14052 (1TAC2Peak) 14078 (1TAC3peaks); /!\ 4041 & 14056 (weirdMCP) /!\ 14030 & 14053 & 14059 (singleShort)
   char eRrOr;
-  const Float_t meanBeamPeakHeight = 253.5;
-  const Float_t meanBeamCharge = 11259.5;
+  const Float_t meanBeamPeakHeight = 256.5;//EDIT value on 02/04, prev.: 253.5;
+  const Float_t meanBeamCharge = 12095.5;//EDIT value on 02/04, prev.: 11259.5;
   const Float_t driftV = 20.; //mm/us
   const Float_t timeBucketSize = 0.160; //us
+  const Float_t Li7ChargePercentage = 0.2537; //charge dep by Li7 as percentage Li8 beam charge
+  const Float_t Li7peakHeight = 0.9998; //bragg peak height of Li7 as percentage Li8 bragg peak height
+  const Float_t Li7avTrLenght = 57.5; //Li7 bragg peak position in Time Buckets
 
 
   if (fillIndividualChannels == false && drawIndividualChannels == true){cout<<"\n~~~~~~~~~~~~~~~~~~~~~WARNING !~~~~~~~~~~~~~~~~~~~\n\nY'need to fill the channels to draw them, asshat.\nGo activate 'fillIndividualChannels' and try again.\n\n\tCan you manage to get THAT right, at least ?\n\n";return 0;}
@@ -228,6 +233,7 @@ Int_t firstMacro(){
       cout<<"\nWARNING ! 'drawChargeVtac == true && drawLengthVtrackCharge == false' is not a supported combo.\nPlease correct.\n\nThank you kindly.\n";return 0;}
   if (drawPeakHeightVtac == true && drawLengthVpeakHeight == false){
       cout<<"\nWARNING ! 'drawPeakHeightVtac == true && drawLengthVpeakHeight == false' ain't no good. Sorry.\n";return 0;}
+  if (draw3DTrack == true && realignTracks == false){cout<<"\nWell met, stranger. I hereby inform you that the option 'draw3DTrack' requires option 'realignTracks' to be enabled, in order to be executed.\nThis message will now terminate your run.\n\nOur deepest apologies.\n";return 0;}
 
 
 
@@ -272,7 +278,7 @@ Int_t firstMacro(){
   fCharacStreamChar = fStreamName.c_str(); //WARNING http://www.cplusplus.com/forum/general/100714/
   fstream characStream(fCharacStreamChar);
   line = 0;
-  if ((useFusionGates == true || addSignalCharacOnPlots == true) && characStream.is_open()){//energy[kev], charge[% of BeamE], peakHeight[factor*beam bragg peak], dist travelled [estim., mm]
+  if ((useFusionGates == true || addSignalCharacOnPlots == true) && characStream.is_open()){//energy[kev], charge[% of BeamE], peakHeight[fraction of beam peak], dist travelled [estim., mm]
       while (characStream>>fusionCharac[line][0]>>fusionCharac[line][1]>>fusionCharac[line][2]>>fusionCharac[line][3]){
           if (line == numberOfEnergies){
               cout<<"\n\nWARNING !\nMore lines in the 'characStream' than space in the 'fusionCharac' matrix, there are.\nFucked up, you have.\nFix it, you should.\n";
@@ -314,6 +320,8 @@ Int_t firstMacro(){
   TH2F* lengthVtac;
   TH2F* chargeVtac;
   TH2F* peakHeightVtac;
+  TH2F* chargeVpeakHeight;
+  TH3F* track3D;
   
   timeBucketFormAveraged = new TH1F("TBFAv","Averaged channels;time bucket;Energy[arb.]",512,0,511);
   timeBucketFormAveraged->Fill(0.);
@@ -341,6 +349,9 @@ Int_t firstMacro(){
   if (drawLengthVtac) lengthVtac = new TH2F("LVtac","Track Length V. TAC;Tr. Length[TB];tac [arb]",512,0,511,850,0,850);
   if (drawPeakHeightVtac) peakHeightVtac = new TH2F("phVtac","Peak height V. TAC;max peak height [arb];tac [arb]",1100,0,1100,850,0,850);
   if (drawChargeVtac) chargeVtac = new TH2F("QVtac","Charge V. TAC;dep. charge [arb];tac [arb]",2500,0,25000,850,0,850);
+  if (drawChargeVpeakHeight == true && substractBckgrd == true) chargeVpeakHeight = new TH2F("CVPH","Charge V. peak height; dep. charge [arb];max peak height [arb]",2500,0,25000,700,0,700);
+  if (drawChargeVpeakHeight == true && substractBckgrd == false) chargeVpeakHeight = new TH2F("CVPH","Charge V. peak height; dep. charge [arb];max peak height [arb]",4500,0,90000,1100,0,1100);
+  if (draw3DTrack) track3D = new TH3F("track3D","track representation;Time buckets;x [mm];y [mm]",512,0,511,244,-121,121,244,-121,121);
 
 //   TH1F* timeBucketForm = new TH1F("TBF", "channel 1;time bucket;Energy[arb.]",512,0,511);
   
@@ -412,6 +423,8 @@ Int_t firstMacro(){
   Float_t maxDerivativePosition[2];
   Float_t temp[3]; //variables for random use
   bool fusionTestValidated = 0;
+  Float_t padsPosition[100][512][2];
+  int checkTrack3D;
 
   
 
@@ -441,12 +454,13 @@ Int_t firstMacro(){
         
         //resetting variables/histograms
         auxChanDone = 0;
-        for (int i=0;i<513;i++){
+        for (int i=0;i<512;i++){
             timeBucketFormAveraged->SetBinContent(i,0.);
             whatsTheDerivative->SetBinContent(i,0.);
             preTBF->SetBinContent(i,0.);
             if (i<100) {storedDerivative[i] = 0; derivativeAverage[i] = 0;}
-            if (i<3) {temp[i] = 0; maxDerivativePosition[i] = 0;}
+            if (i<3) {temp[i] = 0;}
+            if (i<2) {maxDerivativePosition[i] = 0;}
         }
 //         fill(storedDerivative,storedDerivative+100,0);
 //         fill(derivativeAverage,derivativeAverage+100,0);
@@ -460,18 +474,24 @@ Int_t firstMacro(){
         
         //loop through channels in event
         for (Int_t j=0; j<num_hits; j++) {
+            
             done = 0;
+//             for (int i=0;i<512;i++){padPositions[i][0] = 0.;padPositions[i][1] = 0.;}
+            
             for (Int_t k=0; k<517; k++){
                 /*temp cout data    if (k%100==0){cout<<"\nnum_hits : "<<num_hits<<", data["<<j<<"]["<<k<<"] = "<<data[j][k];}*/
                 
                 if (done==0 && k == 4){//ID what the channel is 
                     if (data[j][0] < 2){
                         for (Int_t check = 0; check<numberOfPads; check++){
-                            if ((data[j][0] == mapp[check][0]) && (data[j][1] == mapp[check][1]) && (data[j][2] == mapp[check][2]) && (data[j][3] == mapp[check][3])){whatChan = mapp[check][4];}
+                            if ((data[j][0] == mapp[check][0]) && (data[j][1] == mapp[check][1]) && (data[j][2] == mapp[check][2]) && (data[j][3] == mapp[check][3])){
+                                whatChan = mapp[check][4];
+                                checkTrack3D = check;
+                            }
                         }
                     }  
                     else if(data[j][0] == 2){whatChan =3000+data[j][3];} // ID the auxillary channel
-                    else {cout<<"\nI say, this is rather unexpected indeed old chap'...\n\tEntry num. : "<<i<<", j : "<<j<<", k : "<<k<<endl<<endl;return 0;}
+                    else {cout<<"\n*Posh british accent* I say, this is rather unexpected indeed old chap'...\n\tEntry num. : "<<i<<", j : "<<j<<", k : "<<k<<endl<<endl;return 0;}
                     whichChannel->SetBinContent(j,whatChan);
                     done=1;
 //                     cout<<"\n\twhichChannel here is : "<<data[j][k];
@@ -485,15 +505,21 @@ Int_t firstMacro(){
                     if(k==516){auxChanDone++;} //move to next histogram
                 }
                 else if(auxChanDone >= 6){cout<<"\nError, which is sad.\nAnd 'sad' backwards is 'das', and das not good...\nLook at the Auxillaries.\n";return 0;}
+                if (k>5 && draw3DTrack == true && num_hits <100){
+                    padsPosition[j][k-4][0] = mapp[checkTrack3D][5];
+                    padsPosition[j][k-4][1] = mapp[checkTrack3D][6];
+                }
                 
+
             }
         }
+        
         //section to see if event has pile-up & attempt clean-up/renorm
         temp[0] = whichAuxChanIsTAC(timeBucketFormAuxillary[1]);
         Int_t pileUpInEvent = pileUp(timeBucketFormAuxillary[(int)temp[0]]);
         if (beQuite != 1)cout<<"TAC is in aux. chan. "<<temp[0]<<endl;
         if (beQuite != 1)cout<<"#ofEvents : "<<pileUpInEvent;
-        if (pileUpInEvent == 1) if (beQuite != 1) cout<<"\t-> Accepted"<<endl;
+        if (pileUpInEvent == 1){ if (beQuite != 1) cout<<"\t-> Accepted"<<endl;}
         else {if (beQuite != 1){cout<<"\t-> Rejected"<<endl<<endl;} globalNumberOfPUevents++;}
         
         if (done == 1 && pileUpInEvent == 1){//if at end of event+event was clean && no pile-up, perform last check; then add the average to the signal
@@ -612,6 +638,18 @@ Int_t firstMacro(){
                                 if (drawChargeVtac){chargeVtac->Fill(preTBF->Integral/*AndError*/(maxDerivativePosition[1],maxDerivativePosition[0]+estimatedWidth,""),TACval);}
                             }
                             if (drawLengthVtac){lengthVtac->Fill((maxDerivativePosition[0]+estimatedWidth-maxDerivativePosition[1]),TACval);}
+                            if (drawChargeVpeakHeight){chargeVpeakHeight->Fill(preTBF->Integral/*AndError*/(maxDerivativePosition[1],maxDerivativePosition[0]+estimatedWidth,""),preTBF->GetMaximum());}
+                            if (draw3DTrack == true && num_hits < 100){
+                                for (int i=0;i<num_hits;i++){
+                                    for (int j=maxDerivativePosition[1];j<maxDerivativePosition[0]+estimatedWidth;j++){
+                                        track3D->Fill(j+(510-maxDerivativePosition[0]+estimatedWidth),padsPosition[i][j][0],padsPosition[i][j][1]);
+                                    }
+                                }
+                            }
+                            else if (draw3DTrack == true && num_hits >= 100){
+                                if (!beQuite) cout<<"\nWARNING ! Event incompatible with 'draw3DTrack' option. Dropping option.\n";
+                                draw3DTrack = false;
+                            }
                         }// END 'realignTracks'
                         else if (drawLengthVpeakHeight == true && realignTracks == false){
 //                             cout<<"On fill LVPH avec : "<<(daPeak[daPeakElement]+(p+1)*5-(daPeak[daPeakElement]-10))<<"\t"<<preTBF->GetMaximum()<<endl;
@@ -623,6 +661,7 @@ Int_t firstMacro(){
                         }
                         if (realignTracks == false && drawLengthVbackgrd == true) lengthVbackground->Fill((daPeak[daPeakElement]+(p+1)*5-(daPeak[daPeakElement]-10)),temp[2]);
                         if (realignTracks == false && drawLengthVtac == true) lengthVtac->Fill((daPeak[daPeakElement]+(p+1)*5-(daPeak[daPeakElement]-10)),TACval);
+                        if (realignTracks == false && drawChargeVpeakHeight == true){chargeVpeakHeight->Fill(preTBF->Integral/*AndError*/(daPeak[daPeakElement]-10,daPeak[daPeakElement]+(p+1)*5,""),preTBF->GetMaximum());}
                         
                         p = 1; //break;
                     }
@@ -657,7 +696,7 @@ Int_t firstMacro(){
             }// END checkCleared
         } // END noPileUp
         
-    } // END of loop through channels
+    } // END of loop through events
    } // END if("file.is_open()")
    else {cout << "\n\nWARNING ! FAILED TO OPEN FILE "<<WhichFile<<", ABORTING.\nNow go and find out where you messed up. You prick.\n\n";break;return 0;}
    
@@ -804,12 +843,14 @@ Int_t firstMacro(){
         CLVPH->SetLogz();
         lengthVSheight->Draw("colz");
         if (addSignalCharacOnPlots){
+            TMarker *mLi = new TMarker(Li7avTrLenght,Li7peakHeight*meanBeamPeakHeight,23);
+            mLi->Draw("same");
             for (int i=0;i<numberOfEnergies;i++){
                 ptx[i] = fusionCharac[i][3]/(driftV*timeBucketSize);
                 pty[i] = fusionCharac[i][2]*meanBeamPeakHeight;
 //                 cout<<"\nptx["<<i<<"] = "<<ptx[i]<<"\t, pty["<<i<<"] = "<<pty[i]<<endl;
                 TMarker *m = new TMarker(ptx[i],pty[i],29);
-                m->SetMarkerColorAlpha(kBlue,0.5);
+                m->SetMarkerColor(4);
                 m->Draw("same");
             }
         }
@@ -826,6 +867,8 @@ Int_t firstMacro(){
         CLVC->SetLogz();
         lengthVScharge->Draw("colz");
         if (addSignalCharacOnPlots){
+            TMarker *nLi = new TMarker(Li7avTrLenght,Li7ChargePercentage*meanBeamCharge,23);
+            nLi->Draw("same");
             for (int i=0;i<numberOfEnergies;i++){
                 ptx[i] = fusionCharac[i][3]/(driftV*timeBucketSize);
                 pty[i] = fusionCharac[i][1]*meanBeamCharge/100.;
@@ -890,6 +933,41 @@ Int_t firstMacro(){
             delete CPHVTAC;
         }
   }
+  
+  if (drawChargeVpeakHeight){
+      TCanvas* CQVPH = new TCanvas("CQVPH","CQVPH",600,600);
+        CQVPH->SetLogz();
+        chargeVpeakHeight->Draw("colz");
+        if (addSignalCharacOnPlots){
+            TMarker *oLi = new TMarker(Li7ChargePercentage*meanBeamCharge,Li7peakHeight*meanBeamPeakHeight,23);
+            oLi->Draw("same");
+            for (int i=0;i<numberOfEnergies;i++){
+                ptx[i] = fusionCharac[i][1]*meanBeamCharge/100.;
+                pty[i] = fusionCharac[i][2]*meanBeamPeakHeight;
+//                 cout<<"\nptx["<<i<<"] = "<<ptx[i]<<"\t, pty["<<i<<"] = "<<pty[i]<<endl;
+                TMarker *o = new TMarker(ptx[i],pty[i],29);
+                o->SetMarkerColor(3);
+                o->Draw("same");
+            }
+        }
+        if (saveHistograms){
+            fStreamNameS = fStreamName + "chargeVpeakHeight.root";
+            const char *nameCQVPH = fStreamNameS.c_str(); //WARNING http://www.cplusplus.com/forum/general/100714/
+            CQVPH->SaveAs(nameCQVPH);
+            delete CQVPH;
+        }
+  }
+  
+  if (draw3DTrack){
+      TCanvas* C3DT = new TCanvas("C3DT","C3DT",800,600);
+        track3D->Draw();
+        if (saveHistograms){
+            fStreamNameS = fStreamName + "track3D.root";
+            const char *nameC3DT = fStreamNameS.c_str(); //WARNING http://www.cplusplus.com/forum/general/100714/
+            C3DT->SaveAs(nameC3DT);
+            delete C3DT;
+        }
+  }
     
  cout<<"\n\nEnd of program reached, encountered "<<globalNumberErrors<<" non-terminal errors.\nThere were "<<globalNumberOfPUevents<<" rejected pile-up events.\nThere were "<<globalNumberOfLongEvents<<" rejected long events.\n";
  delete preTBF;
@@ -901,9 +979,12 @@ Int_t firstMacro(){
      if (drawLengthVpeakHeight){  delete lengthVSheight;}
      if (drawLengthVtrackCharge){  delete lengthVScharge;}
      if (drawLengthVbackgrd){  delete lengthVbackground;}
-     if (drawLengthVtac){delete lengthVtac;}
-     if (drawChargeVtac){delete chargeVtac;}
-     if (drawPeakHeightVtac){delete peakHeightVtac;}
+     if (drawLengthVtac){  delete lengthVtac;}
+     if (drawChargeVtac){  delete chargeVtac;}
+     if (drawPeakHeightVtac){  delete peakHeightVtac;}
+     if (drawChargeVpeakHeight){  delete chargeVpeakHeight;}
+//      if (addSignalCharacOnPlots){  delete mLi,m,nLi,n,oLi,o;}
+     if (draw3DTrack){delete track3D;}
      gApplication->Terminate();
  }
  return 0;
