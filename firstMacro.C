@@ -8,6 +8,7 @@
 *	Created:     7/11/2019
 *               
 *	Author:      Maxime Renaud, NSH, UND - KUL
+*	Co-author:   Shilun Jin, NSH, UND
 *
 * ================================================================
 * 
