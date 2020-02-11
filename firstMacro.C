@@ -32,6 +32,7 @@
 #include "TSpectrum.h"
 #include "TF1.h"
 #include "TMath.h"
+#include "TGraph.h"
 #include <stdio.h>
 #include <iostream>
 #include <fstream>
@@ -49,7 +50,8 @@
 #include "TApplication.h"
 #include <cstring>
 #include <TClass.h>
-#include <TF1Convolution.h>
+
+#include "fourier-fcts.c"
 
 
 using namespace std;
@@ -175,7 +177,7 @@ Int_t firstMacro(){
     
 //END---------WHAT DO Y0U WISH TO DO HERE, MORTAL ? -------------------
     
-    bool runOnTheCRC = true; //deactivates mandatory user input & adapt file paths NOTE not optimal for the latter part.
+    bool runOnTheCRC = false; //deactivates mandatory user input & adapt file paths NOTE not optimal for the latter part.
     bool multiRunAnalysis = true; //select between two file, 'list-preAnal.txt' and 'list-analysis.txt', for convenience in swtching between debugging/actual run
     
     bool fillIndividualChannels = false;
@@ -185,6 +187,7 @@ Int_t firstMacro(){
     bool substractBckgrd = true;
     bool beQuite = true; //reduced terminal output
     bool addSignalCharacOnPlots = true;
+    bool deconvoluteThis = true;
     
     bool drawWhichPadIsIt = false;
     bool drawIndividualChannels = false;
@@ -200,6 +203,7 @@ Int_t firstMacro(){
     bool drawPeakHeightVtac = true;
     bool drawChargeVpeakHeight = true;
     bool draw3DTrack = false; //WARNING please only one event at a time
+    bool drawDoubleProjectTrack = false; //TODO. TODO. TODO TODO TODO TODOOOOOOOOOOOOOOOOOOOOOO !
     
     bool saveHistograms = true;
     
@@ -239,12 +243,6 @@ Int_t firstMacro(){
 
 
 
-  //Defining style of graph
-  gStyle->SetOptTitle(0);
-  gStyle->SetOptStat(1111111);//now showing integral under-and-overflow ! //old: 1001110
-  gStyle->SetOptFit(1);
-  gStyle->ToggleEventStatus();
-  
 
   //--CALIBRATION ELEMENTS--------
   
@@ -411,9 +409,60 @@ Int_t firstMacro(){
   example of 3d hist: TH3F* S_QE = new TH3F("S_QE", "Signal avec QE;Y [m];Z [m];#hits", 8,-0.026,0.026, 8,-0.026,0.026,100,0,0.25);
 */
 
-
-
-
+  //def of (de)convolute
+  float anArray1[16],anArray2[16],anArray3[32];
+  float dataTest[16];// {0.,0.00150362,0.018439,0.0835921,0.142119,0.0933979,0.00707567,0.000207203,2.26662e-06,1.07102e-08,1.95578e-08,2.6077e-08,2.98023e-08,0.0183157,0.00300689,0.00021422};
+  float responseTest[16] = {0.};
+  float answerTest[32] = {0.};
+  for (int i = 0;i<16;i++){
+//       if (i<8) responseTest[i] = TMath::Gaus(i,0,1);
+//       if (i>=8) responseTest[i] = 0.;
+//       if (i>=8 && i<16) responseTest[i] = TMath::Gaus(-16+i,0,1);
+      responseTest[i] = TMath::Gaus(i,7,2);
+      dataTest[i] = 0.;
+      anArray1[i] = i;
+      if (i<16) anArray2[i] = i;
+  }
+//   dataTest[2] = dataTest[4] = 1;
+  dataTest[7] = 4;
+  for (int i=0;i<32;i++){
+      cout<<endl<<"answerTest["<<i<<"] = "<<answerTest[i];
+      anArray3[i] = i;
+      if(i<16){cout<<",\tdataTest["<<i<<"] = "<<dataTest[i];/*dataTest2[i] = dataTest[i];*/}
+      if(i<16){cout<<",\tresponseTest["<<i<<"] = "<<responseTest[i];/*responseTest2[i] = responseTest[i];*/}
+  }
+  const float *theArray1 = anArray1;
+  const float *theArray2 = anArray2;
+  const float *theArray3 = anArray3;
+  const float *dataTest2 = dataTest;
+  const float *responseTest2 = responseTest;
+  TGraph* grD = new TGraph(16,theArray1,dataTest);
+  TGraph* grR = new TGraph(16,theArray2,responseTest2);
+  
+  cout<<endl<<endl<<endl;
+  convlv(dataTest,16,responseTest,16,1,answerTest);
+  for (int i=0;i<32;i++){
+      cout<<endl<<"answerTest["<<i<<"] = "<<answerTest[i];
+      if(i<16){cout<<",\tdataTest["<<i<<"] = "<<dataTest[i];}
+      if(i<16){cout<<",\tresponseTest["<<i<<"] = "<<responseTest[i];}
+  }
+  cout<<endl;
+  const float *answerTest2 = answerTest;
+  TGraph* grA = new TGraph(32,theArray3,answerTest2);
+  
+  TCanvas* Ctestc = new TCanvas("Ctestc","Ctestc",600,600);
+  grA->SetLineColor(kGreen);
+  grA->Draw("AC*");
+  grD->SetLineColor(kBlue);
+  grD->Draw("same");
+  grR->SetLineColor(kRed);
+  grR->Draw("same");
+  
+  return 0;
+  
+  
+  
+  
   
   //Def of variables /!\ mind that variable have to match for root extraction, storing Int_t->Double_t won't fly
   Int_t num_hits;
@@ -743,6 +792,12 @@ Int_t firstMacro(){
   
 // -----------------------------DEF OF CANVAS AND PLOT---------------------------------------
 
+  //Defining style of graph
+  gStyle->SetOptTitle(0);
+  gStyle->SetOptStat(1111111);//now showing integral under-and-overflow ! //old: 1001110
+  gStyle->SetOptFit(1);
+  gStyle->ToggleEventStatus();
+  
   //save path definition
   string fStreamNameS;
   if (runOnTheCRC == false){fStreamName = "/home/mrenaud1/Documents/Li8Analysis/requestedGraphs/autoSaved-";}
@@ -750,6 +805,9 @@ Int_t firstMacro(){
   //prepare for point additions
   float_t ptx[numberOfEnergies], pty[numberOfEnergies], ptz[numberOfEnergies];
   for (int i=0;i<numberOfEnergies;i++){ptz[i] = i;}
+  
+  
+  
   
   if (drawWhichPadIsIt){
       TCanvas* Cchan = new TCanvas("Cchan","Cchan",400,400);
