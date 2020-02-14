@@ -13,7 +13,7 @@
 * ================================================================
 * 
 * TODO look into remanence for plotted histograms so you can delete your objects
-* NOTE: because I'm an uncivilised Barbarian, this is supposed to be invoked as a root macro, not a compiled program. 
+* NOTE: because I'm an uncivilised Barbarian, this is supposed to be invoked or compiled as a root macro (either 'root <fileName>' or 'root -L <fileName>++'), not a compiled program. 
 * 
 * 
 * NOTE HOWTO:at the beginning of the firstMacro(), a few self-explanatory boolians
@@ -28,9 +28,11 @@
 #include "TBranch.h"
 #include "TH1F.h"
 #include "TH2F.h"
+#include "TH3F.h"
 #include "TFile.h"
 #include "TSpectrum.h"
 #include "TF1.h"
+#include "TMarker.h"
 #include "TMath.h"
 #include "TGraph.h"
 #include <stdio.h>
@@ -172,13 +174,13 @@ double the_steppar(double* var, double* param){
 //=================================================================================================================================
 
 
-//Int_t firstMacro(){
-Int_t main(){
+Int_t firstMacro(){
+
 
     
 //END---------WHAT DO Y0U WISH TO DO HERE, MORTAL ? -------------------
     
-    bool runOnTheCRC = false; //deactivates mandatory user input & adapt file paths NOTE not optimal for the latter part.
+    bool runOnTheCRC = true; //deactivates mandatory user input & adapt file paths NOTE not optimal for the latter part.
     bool multiRunAnalysis = true; //select between two file, 'list-preAnal.txt' and 'list-analysis.txt', for convenience in swtching between debugging/actual run
     
     bool fillIndividualChannels = false;
@@ -187,7 +189,7 @@ Int_t main(){
     bool useFusionGates = false; //attempt to only keep events fulfilling certain conditions [hard-coded atm]
     bool substractBckgrd = true;
     bool beQuite = true; //reduced terminal output
-    bool addSignalCharacOnPlots = false;
+    bool addSignalCharacOnPlots = true;
     bool deconvoluteThis = false;
     
     bool drawWhichPadIsIt = false;
@@ -196,13 +198,13 @@ Int_t main(){
     bool drawAuxillaryChannels = false;
     bool drawTBFeventRemanent = false; //drawTimeBucketFormatEventRemanent = draw a summed profile of all tracks for all events
     bool drawDerivatives = false; //only one event at a time
-    bool drawLengthVpeakHeight = false;
-    bool drawLengthVtrackCharge = false;
-    bool drawLengthVbackgrd = false;
-    bool drawLengthVtac = false;
-    bool drawChargeVtac = false;
-    bool drawPeakHeightVtac = false;
-    bool drawChargeVpeakHeight = false;
+    bool drawLengthVpeakHeight = true;
+    bool drawLengthVtrackCharge = true;
+    bool drawLengthVbackgrd = true;
+    bool drawLengthVtac = true;
+    bool drawChargeVtac = true;
+    bool drawPeakHeightVtac = true;
+    bool drawChargeVpeakHeight = true;
     bool draw3DTrack = false; //WARNING please only one event at a time
     bool drawDoubleProjectTrack = true; //TODO. TODO. TODO TODO TODO TODOOOOOOOOOOOOOOOOOOOOOO !
     bool drawNbrOfPadsVcharge = true; 
