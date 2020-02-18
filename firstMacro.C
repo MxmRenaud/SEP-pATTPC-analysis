@@ -28,9 +28,11 @@
 #include "TBranch.h"
 #include "TH1F.h"
 #include "TH2F.h"
+#include "TH3F.h"
 #include "TFile.h"
 #include "TSpectrum.h"
 #include "TF1.h"
+#include "TMarker.h"
 #include "TMath.h"
 #include "TGraph.h"
 #include <stdio.h>
@@ -51,7 +53,7 @@
 #include <cstring>
 #include <TClass.h>
 
-#include "fourier-fcts.c"
+#include "convolutionTA/convolution.c"
 
 
 using namespace std;
@@ -69,7 +71,7 @@ Int_t whichAuxChanIsTAC(TH1I* histo){ //is the TAC in the auxillary channel 1 or
 //     delete fa0;
 //     if (boo == true) return 2;
 //     else return 1;
-    //locate the max aqnd it's position: if in the back and over 3000, then it's MCP not TAC
+    //locate the max and it's position: if in the back and over 3000, then it's MCP not TAC
     bool boo = false;
     Int_t maxReached=0;
     Int_t savePosition;
@@ -186,24 +188,27 @@ Int_t firstMacro(){
     bool useFusionGates = false; //attempt to only keep events fulfilling certain conditions [hard-coded atm]
     bool substractBckgrd = true;
     bool beQuite = true; //reduced terminal output
-    bool addSignalCharacOnPlots = true;
-    bool deconvoluteThis = true;
+    bool addSignalCharacOnPlots = false;
+    bool deconvoluteThis = false;
     
     bool drawWhichPadIsIt = false;
     bool drawIndividualChannels = false;
     bool drawSummedChannels = false; //sums all channels of a single event into a track and draw.
     bool drawAuxillaryChannels = false;
-    bool drawTBFeventRemanent = true; //drawTimeBucketFormatEventRemanent = draw a summed profile of all tracks for all events
+    bool drawTBFeventRemanent = false; //drawTimeBucketFormatEventRemanent = draw a summed profile of all tracks for all events
     bool drawDerivatives = false; //only one event at a time
-    bool drawLengthVpeakHeight = true;
-    bool drawLengthVtrackCharge = true;
-    bool drawLengthVbackgrd = true;
-    bool drawLengthVtac = true;
-    bool drawChargeVtac = true;
-    bool drawPeakHeightVtac = true;
-    bool drawChargeVpeakHeight = true;
+    bool drawLengthVpeakHeight = false;
+    bool drawLengthVtrackCharge = false;
+    bool drawLengthVbackgrd = false;
+    bool drawLengthVtac = false;
+    bool drawChargeVtac = false;
+    bool drawPeakHeightVtac = false;
+    bool drawChargeVpeakHeight = false;
     bool draw3DTrack = false; //WARNING please only one event at a time
-    bool drawDoubleProjectTrack = false; //TODO. TODO. TODO TODO TODO TODOOOOOOOOOOOOOOOOOOOOOO !
+    bool drawDoubleProjectTrack = true; //TODO. TODO. TODO TODO TODO TODOOOOOOOOOOOOOOOOOOOOOO !
+    bool drawNbrOfPadsVcharge = true; 
+    bool drawNbrOfPadsVpeakHeight = true;
+    bool drawNbrOfPadsVtac = true;
     
     bool saveHistograms = true;
     
@@ -239,7 +244,7 @@ Int_t firstMacro(){
       cout<<"\nWARNING ! 'drawChargeVtac == true && drawLengthVtrackCharge == false' is not a supported combo.\nPlease correct.\n\nThank you kindly.\n";return 0;}
   if (drawPeakHeightVtac == true && drawLengthVpeakHeight == false){
       cout<<"\nWARNING ! 'drawPeakHeightVtac == true && drawLengthVpeakHeight == false' ain't no good. Sorry.\n";return 0;}
-  if (draw3DTrack == true && realignTracks == false){cout<<"\nWell met, stranger. I hereby inform you that the option 'draw3DTrack' requires option 'realignTracks' to be enabled, in order to be executed.\nThis message will now terminate your run.\n\nOur deepest apologies.\n";return 0;}
+  if ((draw3DTrack == true || drawDoubleProjectTrack == true) && realignTracks == false){cout<<"\nWell met, stranger. I hereby inform you that the options 'draw3DTrack' and 'drawDoubleProjectTrack' require option 'realignTracks' to be enabled, in order to be executed.\nThis message will now terminate your run.\n\nOur deepest apologies.\n";return 0;}
 
 
 
@@ -302,7 +307,7 @@ Int_t firstMacro(){
 	else {fStreamName = "/afs/crc.nd.edu/user/m/mrenaud1/Public/SEP-pATTPC-analysis/list-analysis.txt";}
   }
   else{
-	if (multiRunAnalysis) {fStreamName = "list-preAnal.txt";}
+	if (multiRunAnalysis == false) {fStreamName = "list-preAnal.txt";}
 	else {fStreamName = "list-analysis.txt";}
   }
   fListChar = fStreamName.c_str(); //WARNING http://www.cplusplus.com/forum/general/100714/
@@ -332,6 +337,11 @@ Int_t firstMacro(){
   TH2F* peakHeightVtac;
   TH2F* chargeVpeakHeight;
   TH3F* track3D;
+  TH2F* track2Dfront[10];
+  TH1F* trackProjection[10];
+  TH2F* nbrOfPadsVtac;
+  TH2F* nbrOfPadsVcharge;
+  TH2F* nbrOfPadsVpeakHeight;
   
   timeBucketFormAveraged = new TH1F("TBFAv","Averaged channels;time bucket;Energy[arb.]",512,0,511);
   timeBucketFormAveraged->Fill(0.);
@@ -362,6 +372,18 @@ Int_t firstMacro(){
   if (drawChargeVpeakHeight == true && substractBckgrd == true) chargeVpeakHeight = new TH2F("CVPH","Charge V. peak height; dep. charge [arb];max peak height [arb]",2500,0,25000,700,0,700);
   if (drawChargeVpeakHeight == true && substractBckgrd == false) chargeVpeakHeight = new TH2F("CVPH","Charge V. peak height; dep. charge [arb];max peak height [arb]",4500,0,90000,1100,0,1100);
   if (draw3DTrack) track3D = new TH3F("track3D","track representation;Time buckets;x [mm];y [mm]",512,0,511,244,-121,121,244,-121,121);
+  if (drawDoubleProjectTrack){
+      for (int i=0;i<10;i++){
+          track2Dfront[i] = new TH2F(Form("track2Dfront #%i",i),Form("Track #%i pad use;x [mm];y [mm]",i),244,-121,121,244,-121,121);
+          track2Dfront[i]->Fill(0.,0.);
+          trackProjection[i] = new TH1F(Form("Track #%i profile",i),Form("Track #%i profile;time bucket;Energy[arb.]",i),511,0,510);
+      }
+  }
+  if (drawNbrOfPadsVcharge == true && substractBckgrd == true) nbrOfPadsVcharge = new TH2F("padsVcharge","#pads V. dep. charge;#fired pads;dep. charge [arb]",150,0,149,2500,0,25000);
+  if (drawNbrOfPadsVcharge == true && substractBckgrd == false) nbrOfPadsVcharge = new TH2F("padsVcharge","#pads V. dep. charge;#fired pads;dep. charge [arb]",150,0,149,4500,0,90000);
+  if (drawNbrOfPadsVpeakHeight == true && substractBckgrd == true) nbrOfPadsVpeakHeight = new TH2F("padsVpeakHeight","#pads V. peak Height;#fired pads;max peak height [arb]",150,0,149,700,0,700);
+  if (drawNbrOfPadsVpeakHeight == true && substractBckgrd == false) nbrOfPadsVpeakHeight = new TH2F("padsVpeakHeight","#pads V. peak Height;#fired pads;max peak height [arb]",150,0,149,1100,0,1100);
+  if (drawNbrOfPadsVtac) nbrOfPadsVtac = new TH2F("padsVtac","#pads V. TAC;#fired pads;tac [arb]",150,0,149,850,0,850);
 
 //   TH1F* timeBucketForm = new TH1F("TBF", "channel 1;time bucket;Energy[arb.]",512,0,511);
   
@@ -410,53 +432,33 @@ Int_t firstMacro(){
 */
 
   //def of (de)convolute
-  float anArray1[16],anArray2[16],anArray3[32];
-  float dataTest[16];// {0.,0.00150362,0.018439,0.0835921,0.142119,0.0933979,0.00707567,0.000207203,2.26662e-06,1.07102e-08,1.95578e-08,2.6077e-08,2.98023e-08,0.0183157,0.00300689,0.00021422};
-  float responseTest[16] = {0.};
-  float answerTest[32] = {0.};
-  for (int i = 0;i<16;i++){
-//       if (i<8) responseTest[i] = TMath::Gaus(i,0,1);
-//       if (i>=8) responseTest[i] = 0.;
-//       if (i>=8 && i<16) responseTest[i] = TMath::Gaus(-16+i,0,1);
-      responseTest[i] = TMath::Gaus(i,7,2);
-      dataTest[i] = 0.;
+  int length = 256;
+  float anArray1[length],anArray3[length];
+  float dataTest[length];
+  float answerTest[2*length];
+  for (int i = 0;i<length;i++){
+      dataTest[i] = 2.0*TMath::Gaus(i,91,6);
       anArray1[i] = i;
-      if (i<16) anArray2[i] = i;
-  }
-//   dataTest[2] = dataTest[4] = 1;
-  dataTest[7] = 4;
-  for (int i=0;i<32;i++){
-      cout<<endl<<"answerTest["<<i<<"] = "<<answerTest[i];
       anArray3[i] = i;
-      if(i<16){cout<<",\tdataTest["<<i<<"] = "<<dataTest[i];/*dataTest2[i] = dataTest[i];*/}
-      if(i<16){cout<<",\tresponseTest["<<i<<"] = "<<responseTest[i];/*responseTest2[i] = responseTest[i];*/}
+//       anArray3[length+i] = length+i;
   }
+  
   const float *theArray1 = anArray1;
-  const float *theArray2 = anArray2;
   const float *theArray3 = anArray3;
   const float *dataTest2 = dataTest;
-  const float *responseTest2 = responseTest;
-  TGraph* grD = new TGraph(16,theArray1,dataTest);
-  TGraph* grR = new TGraph(16,theArray2,responseTest2);
+  TGraph* grD = new TGraph(length,anArray1,dataTest2);
   
-  cout<<endl<<endl<<endl;
-  convlv(dataTest,16,responseTest,16,1,answerTest);
-  for (int i=0;i<32;i++){
-      cout<<endl<<"answerTest["<<i<<"] = "<<answerTest[i];
-      if(i<16){cout<<",\tdataTest["<<i<<"] = "<<dataTest[i];}
-      if(i<16){cout<<",\tresponseTest["<<i<<"] = "<<responseTest[i];}
-  }
   cout<<endl;
+  convolution(dataTest,answerTest,1);
+  
   const float *answerTest2 = answerTest;
-  TGraph* grA = new TGraph(32,theArray3,answerTest2);
+  TGraph* grA = new TGraph(length,anArray1,answerTest2);
   
   TCanvas* Ctestc = new TCanvas("Ctestc","Ctestc",600,600);
-  grA->SetLineColor(kGreen);
-  grA->Draw("AC*");
   grD->SetLineColor(kBlue);
-  grD->Draw("same");
-  grR->SetLineColor(kRed);
-  grR->Draw("same");
+  grD->Draw("AC");
+  grA->SetLineColor(kGreen);
+  grA->Draw("same");
   
   return 0;
   
@@ -486,6 +488,8 @@ Int_t firstMacro(){
   bool fusionTestValidated = 0;
   Float_t padsPosition[100][512][2];
   int checkTrack3D;
+  bool did3DtrackGetMade = false;
+  int projectionTrackLimit = 0;
 
   
 
@@ -519,6 +523,11 @@ Int_t firstMacro(){
             timeBucketFormAveraged->SetBinContent(i,0.);
             whatsTheDerivative->SetBinContent(i,0.);
             preTBF->SetBinContent(i,0.);
+            if (projectionTrackLimit < 10){
+                for (int j=0;j<100;j++){
+                    padsPosition[j][i][0] = 0;padsPosition[j][i][1] = 0;
+                }
+            }
             if (i<100) {storedDerivative[i] = 0; derivativeAverage[i] = 0;}
             if (i<3) {temp[i] = 0;}
             if (i<2) {maxDerivativePosition[i] = 0;}
@@ -566,12 +575,10 @@ Int_t firstMacro(){
                     if(k==516){auxChanDone++;} //move to next histogram
                 }
                 else if(auxChanDone >= 6){cout<<"\nError, which is sad.\nAnd 'sad' backwards is 'das', and das not good...\nLook at the Auxillaries.\n";return 0;}
-                if (k>5 && draw3DTrack == true && num_hits <100){
+                if (k>5 && projectionTrackLimit <10 && (draw3DTrack == true || drawDoubleProjectTrack == true) /*&& did3DtrackGetMade == false*/ && num_hits <100){
                     padsPosition[j][k-4][0] = mapp[checkTrack3D][5];
                     padsPosition[j][k-4][1] = mapp[checkTrack3D][6];
                 }
-                
-
             }
         }
         
@@ -646,6 +653,7 @@ Int_t firstMacro(){
                         break;
                     }
                 }
+                
                 for (int p = howManyInDerivArray-3;p>0;p--){
                     if (derivativeAverage[p] < -1.01){
                         if (beQuite != 1) cout<<"tentative : "<<p<<"\t"<<daPeak[daPeakElement]+(p+1)*5<<endl; //p +1(for stepping) 
@@ -673,6 +681,7 @@ Int_t firstMacro(){
 //                             cout<<"\n\t\tNotice me Senpai !\n"; 
                             
                             if (drawLengthVbackgrd) lengthVbackground->Fill(maxDerivativePosition[0]+estimatedWidth-maxDerivativePosition[1],temp[2]); //temp[2] holds the background/baseline
+                            
                             if (drawLengthVpeakHeight){
                                 if (useFusionGates == false){lengthVSheight->Fill((maxDerivativePosition[0]+estimatedWidth-maxDerivativePosition[1]),preTBF->GetMaximum());}
                                 else {
@@ -689,6 +698,7 @@ Int_t firstMacro(){
                                 }
                                 if (drawPeakHeightVtac){peakHeightVtac->Fill(preTBF->GetMaximum(),TACval);}
                             }
+                            
                             if (drawLengthVtrackCharge){
                                 if (useFusionGates == false){lengthVScharge->Fill((maxDerivativePosition[0]+estimatedWidth-maxDerivativePosition[1]),preTBF->Integral/*AndError*/(maxDerivativePosition[1],maxDerivativePosition[0]+estimatedWidth,""));}
                                 else {
@@ -698,19 +708,39 @@ Int_t firstMacro(){
                                 }
                                 if (drawChargeVtac){chargeVtac->Fill(preTBF->Integral/*AndError*/(maxDerivativePosition[1],maxDerivativePosition[0]+estimatedWidth,""),TACval);}
                             }
+                            
                             if (drawLengthVtac){lengthVtac->Fill((maxDerivativePosition[0]+estimatedWidth-maxDerivativePosition[1]),TACval);}
+                            
                             if (drawChargeVpeakHeight){chargeVpeakHeight->Fill(preTBF->Integral/*AndError*/(maxDerivativePosition[1],maxDerivativePosition[0]+estimatedWidth,""),preTBF->GetMaximum());}
+                            
                             if (draw3DTrack == true && num_hits < 100){
                                 for (int i=0;i<num_hits;i++){
                                     for (int j=maxDerivativePosition[1];j<maxDerivativePosition[0]+estimatedWidth;j++){
                                         track3D->Fill(j+(510-maxDerivativePosition[0]+estimatedWidth),padsPosition[i][j][0],padsPosition[i][j][1]);
                                     }
                                 }
+                                did3DtrackGetMade = true;
+                                draw3DTrack = false;
                             }
                             else if (draw3DTrack == true && num_hits >= 100){
                                 if (!beQuite) cout<<"\nWARNING ! Event incompatible with 'draw3DTrack' option. Dropping option.\n";
-                                draw3DTrack = false;
+                                draw3DTrack = false; //TODO change to allow for next track to be selected
                             }
+                            
+                            if (drawDoubleProjectTrack==true && projectionTrackLimit <10){
+                                for (int i=0;i<num_hits;i++){
+                                    for (int j=maxDerivativePosition[1];j<maxDerivativePosition[0]+estimatedWidth;j++){
+                                        track2Dfront[projectionTrackLimit]->Fill(padsPosition[i][j][0],padsPosition[i][j][1]);
+                                    }
+                                }
+                                trackProjection[projectionTrackLimit]->Add(preTBF);
+                                projectionTrackLimit++;
+                            }
+                            
+                            if (drawNbrOfPadsVcharge){ nbrOfPadsVcharge->Fill(num_hits,preTBF->Integral/*AndError*/(maxDerivativePosition[1],maxDerivativePosition[0]+estimatedWidth,""));}
+                            if (drawNbrOfPadsVtac){ nbrOfPadsVtac->Fill(num_hits,TACval);}
+                            if (drawNbrOfPadsVpeakHeight){ nbrOfPadsVpeakHeight->Fill(num_hits,preTBF->GetMaximum());}
+                            
                         }// END 'realignTracks'
                         else if (drawLengthVpeakHeight == true && realignTracks == false){
 //                             cout<<"On fill LVPH avec : "<<(daPeak[daPeakElement]+(p+1)*5-(daPeak[daPeakElement]-10))<<"\t"<<preTBF->GetMaximum()<<endl;
@@ -723,10 +753,14 @@ Int_t firstMacro(){
                         if (realignTracks == false && drawLengthVbackgrd == true) lengthVbackground->Fill((daPeak[daPeakElement]+(p+1)*5-(daPeak[daPeakElement]-10)),temp[2]);
                         if (realignTracks == false && drawLengthVtac == true) lengthVtac->Fill((daPeak[daPeakElement]+(p+1)*5-(daPeak[daPeakElement]-10)),TACval);
                         if (realignTracks == false && drawChargeVpeakHeight == true){chargeVpeakHeight->Fill(preTBF->Integral/*AndError*/(daPeak[daPeakElement]-10,daPeak[daPeakElement]+(p+1)*5,""),preTBF->GetMaximum());}
+                        if (realignTracks == false && drawNbrOfPadsVcharge == true){nbrOfPadsVcharge->Fill(num_hits,preTBF->Integral/*AndError*/(daPeak[daPeakElement]-10,daPeak[daPeakElement]+(p+1)*5,""));}
+                        if (realignTracks == false && drawNbrOfPadsVpeakHeight == true){nbrOfPadsVpeakHeight->Fill(num_hits,preTBF->GetMaximum());}
+                        if (realignTracks == false && drawNbrOfPadsVtac == true){nbrOfPadsVtac->Fill(num_hits,TACval);}
                         
                         p = 1; //break;
                     }
                 }
+                
                
                 
                 //clean up negatives && filling 
@@ -1028,7 +1062,7 @@ Int_t firstMacro(){
         }
   }
   
-  if (draw3DTrack){
+  if (did3DtrackGetMade){
       TCanvas* C3DT = new TCanvas("C3DT","C3DT",800,600);
         track3D->Draw();
         if (saveHistograms){
@@ -1036,6 +1070,60 @@ Int_t firstMacro(){
             const char *nameC3DT = fStreamNameS.c_str(); //WARNING http://www.cplusplus.com/forum/general/100714/
             C3DT->SaveAs(nameC3DT);
             delete C3DT;
+        }
+  }
+  
+  if (drawDoubleProjectTrack){
+      TCanvas* CDPT = new TCanvas("CDPT","CDPT",1000,1000);
+        CDPT->Divide(4,5); 
+        CDPT->ToggleEventStatus();
+        for (unsigned int divNumb=1;divNumb<11;divNumb++){
+            CDPT->cd(divNumb);
+            track2Dfront[divNumb-1]->Draw("colz");
+            CDPT->cd(divNumb+10);
+            trackProjection[divNumb-1]->Draw();
+        }
+        if (saveHistograms){
+            fStreamNameS = fStreamName + "10Tracks.root";
+            const char *nameCDPT = fStreamNameS.c_str(); //WARNING http://www.cplusplus.com/forum/general/100714/
+            CDPT->SaveAs(nameCDPT);
+            delete CDPT;
+        }
+  }
+  
+  if (drawNbrOfPadsVcharge){
+      TCanvas* CNbrVQ = new TCanvas("CNbrVQ","CNbrVQ",600,600);
+        CNbrVQ->SetLogz();
+        nbrOfPadsVcharge->Draw("colz");
+        if (saveHistograms){
+            fStreamNameS = fStreamName + "nbrOfPadsVcharge.root";
+            const char *nameCNbrVQ = fStreamNameS.c_str(); //WARNING http://www.cplusplus.com/forum/general/100714/
+            CNbrVQ->SaveAs(nameCNbrVQ);
+            delete CNbrVQ;
+        }
+  }
+  
+  if (drawNbrOfPadsVtac){
+      TCanvas* CNbrVTAC = new TCanvas("CNbrVTAC","CNbrVTAC",600,600);
+        CNbrVTAC->SetLogz();
+        nbrOfPadsVtac->Draw("colz");
+        if (saveHistograms){
+            fStreamNameS = fStreamName + "nbrOfPadsVtac.root";
+            const char *nameCNbrVTAC = fStreamNameS.c_str(); //WARNING http://www.cplusplus.com/forum/general/100714/
+            CNbrVTAC->SaveAs(nameCNbrVTAC);
+            delete CNbrVTAC;
+        }
+  }
+  
+  if (drawNbrOfPadsVpeakHeight){
+      TCanvas* CNbrVPH = new TCanvas("CNbrVPH","CNbrVPH",600,600);
+        CNbrVPH->SetLogz();
+        nbrOfPadsVpeakHeight->Draw("colz");
+        if (saveHistograms){
+            fStreamNameS = fStreamName + "nbrOfPadsVpeakHeight.root";
+            const char *nameCNbrVPH = fStreamNameS.c_str(); //WARNING http://www.cplusplus.com/forum/general/100714/
+            CNbrVPH->SaveAs(nameCNbrVPH);
+            delete CNbrVPH;
         }
   }
     
@@ -1054,7 +1142,11 @@ Int_t firstMacro(){
      if (drawPeakHeightVtac){  delete peakHeightVtac;}
      if (drawChargeVpeakHeight){  delete chargeVpeakHeight;}
 //      if (addSignalCharacOnPlots){  delete mLi,m,nLi,n,oLi,o;}
-     if (draw3DTrack){delete track3D;}
+     if (did3DtrackGetMade){delete track3D;}
+     if (drawDoubleProjectTrack){for (unsigned int divNumb=0;divNumb<10;divNumb++){delete track2Dfront[divNumb]; delete trackProjection[divNumb];}}
+     if (drawNbrOfPadsVcharge){delete nbrOfPadsVcharge;}
+     if (drawNbrOfPadsVpeakHeight){delete nbrOfPadsVpeakHeight;}
+     if (drawNbrOfPadsVtac){delete nbrOfPadsVtac;}
      gApplication->Terminate();
  }
  return 0;
