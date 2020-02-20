@@ -187,15 +187,15 @@ Int_t firstMacro(){
     bool acceptPeaksBelowBeam = false;      // do you want to keep events that peak much further than the primary beam ? see 'pointOfPeakRejection' Will exclude most events that are just noise and some disintegration events.
     bool useFusionGates = false;            //attempt to only keep events fulfilling certain conditions [hard-coded atm] TODO change that
     bool substractBckgrd = true;
-    bool beQuite = true;                    //reduced terminal output
+    bool beQuite = false;                    //reduced terminal output
     bool addSignalCharacOnPlots = false;    //plot expected values for fusion/contaminants on some of the data plots.
-    bool deconvoluteThis = false;           //deconvolute data before any plotting WARNING currently very unstable option
+    bool deconvoluteThis = true;           //deconvolute data before any plotting WARNING currently very unstable option
     
     bool drawWhichPadIsIt = false;
     bool drawIndividualChannels = false;
     bool drawSummedChannels = false;        //sums all channels of a single event into a track and draw.
     bool drawAuxillaryChannels = false;
-    bool drawTBFeventRemanent = false;      //drawTimeBucketFormatEventRemanent = draw a summed profile of all tracks for all events
+    bool drawTBFeventRemanent = true;      //drawTimeBucketFormatEventRemanent = draw a summed profile of all tracks for all events
     bool drawDerivatives = false;           //NOTE : Hard-coded for only one event at a time
     bool drawLengthVpeakHeight = false;
     bool drawLengthVtrackCharge = false;
@@ -343,6 +343,7 @@ Int_t firstMacro(){
   TH2F* nbrOfPadsVtac;
   TH2F* nbrOfPadsVcharge;
   TH2F* nbrOfPadsVpeakHeight;
+  TH1F* deconvolutedProfile;
   
   timeBucketFormAveraged = new TH1F("TBFAv","Averaged channels;time bucket;Energy[arb.]",512,0,511);
   timeBucketFormAveraged->Fill(0.);
@@ -385,6 +386,7 @@ Int_t firstMacro(){
   if (drawNbrOfPadsVpeakHeight == true && substractBckgrd == true) nbrOfPadsVpeakHeight = new TH2F("padsVpeakHeight","#pads V. peak Height;#fired pads;max peak height [arb]",150,0,149,700,0,700);
   if (drawNbrOfPadsVpeakHeight == true && substractBckgrd == false) nbrOfPadsVpeakHeight = new TH2F("padsVpeakHeight","#pads V. peak Height;#fired pads;max peak height [arb]",150,0,149,1100,0,1100);
   if (drawNbrOfPadsVtac) nbrOfPadsVtac = new TH2F("padsVtac","#pads V. TAC;#fired pads;tac [arb]",150,0,149,850,0,850);
+  if (deconvoluteThis) deconvolutedProfile = new TH1F("deconvolutedProfile","Deconv. profile;time bucket;Energy[arb]",512,0,511);
 
   
 
@@ -435,14 +437,16 @@ Int_t firstMacro(){
 
   //def of (de)convolute
   float anArray1[lengthOfConvolArray],anArray3[lengthOfConvolArray], dataTest[lengthOfConvolArray], answerTest[2*lengthOfConvolArray];
-  for (int i = 0;i<lengthOfConvolArray;i++){
-      dataTest[i] = 2.0*TMath::Gaus(i,91,6);
-      anArray1[i] = i;
-      anArray3[i] = i;
-//       anArray3[lengthOfConvolArray+i] = lengthOfConvolArray+i;
+  if (deconvoluteThis){
+      for (int i = 0;i<lengthOfConvolArray;i++){
+//           dataTest[i] = 2.0*TMath::Gaus(i,91,6);
+          anArray1[i] = i;
+          anArray3[i] = i;
+//           anArray3[lengthOfConvolArray+i] = lengthOfConvolArray+i;
+      }
   }
   
-  const float *theArray1 = anArray1;
+/*  const float *theArray1 = anArray1;
   const float *theArray3 = anArray3;
   const float *dataTest2 = dataTest;
   TGraph* grD = new TGraph(lengthOfConvolArray,anArray1,dataTest2);
@@ -459,7 +463,7 @@ Int_t firstMacro(){
   grA->SetLineColor(kGreen);
   grA->Draw("same");
   
-  return 0;
+  return 0;*/
   
   
   
@@ -510,7 +514,7 @@ Int_t firstMacro(){
     
     //Recursively go through tree, getting "Fill" after "Fill"
     
-    for (Int_t i=EVENT; i</*EVENT+1000*/tree->GetEntries(); i++){
+    for (Int_t i=EVENT; i<EVENT+1/*tree->GetEntries()*/; i++){
         tree->GetEntry(i);
         if (beQuite != 1) cout<<"\nEvent #"<<i<<", num_hits : "<<num_hits<<endl<<endl;
         if (num_hits > 100){cout<<"\nWARNING, event "<<i<<"has too many entries.";globalNumberErrors++;}//TODO add proper error handeling
@@ -736,6 +740,12 @@ Int_t firstMacro(){
                             if (drawNbrOfPadsVtac){ nbrOfPadsVtac->Fill(num_hits,TACval);}
                             if (drawNbrOfPadsVpeakHeight){ nbrOfPadsVpeakHeight->Fill(num_hits,preTBF->GetMaximum());}
                             
+                            if (deconvoluteThis){
+                                for (int i=maxDerivativePosition[1];i<maxDerivativePosition[0]+estimatedWidth-maxDerivativePosition[1];i++){
+                                    
+                                }
+                            }
+                            
                         }// END 'realignTracks'
                         else if (drawLengthVpeakHeight == true && realignTracks == false){
 //                             cout<<"On fill LVPH avec : "<<(daPeak[daPeakElement]+(p+1)*5-(daPeak[daPeakElement]-10))<<"\t"<<preTBF->GetMaximum()<<endl;
@@ -751,8 +761,9 @@ Int_t firstMacro(){
                         if (realignTracks == false && drawNbrOfPadsVcharge == true){nbrOfPadsVcharge->Fill(num_hits,preTBF->Integral/*AndError*/(daPeak[daPeakElement]-10,daPeak[daPeakElement]+(p+1)*5,""));}
                         if (realignTracks == false && drawNbrOfPadsVpeakHeight == true){nbrOfPadsVpeakHeight->Fill(num_hits,preTBF->GetMaximum());}
                         if (realignTracks == false && drawNbrOfPadsVtac == true){nbrOfPadsVtac->Fill(num_hits,TACval);}
+
                         
-                        p = 1; //break;
+                        p = 1; //break out of the "for (int p = howManyInDerivArray-3;p>0;p--)" loop
                     }
                 }
                 
