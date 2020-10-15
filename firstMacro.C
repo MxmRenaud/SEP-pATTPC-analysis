@@ -21,7 +21,6 @@
 */
 
 #include <stdlib.h>
-#include <stdio.h>
 #include "TGraphErrors.h"
 #include "TCanvas.h"
 #include "TTree.h"
@@ -30,7 +29,6 @@
 #include "TH2F.h"
 #include "TH3F.h"
 #include "TFile.h"
-#include "TSpectrum.h"
 #include "TF1.h"
 #include "TMarker.h"
 #include "TMath.h"
@@ -61,9 +59,11 @@ using namespace std;
 Int_t globalNumberErrors;
 Int_t globalNumberOfPUevents;
 Int_t globalNumberOfLongEvents;
+Int_t globalNumberOfTACchannelIDproblems;
+Int_t globalNumberOfMassiveEvents;
 
 Int_t whichAuxChanIsTAC(TH1I* histo){ //is the TAC in the auxillary channel 1 or 2 ?
-    //not valid, some MCP signals have very low plateaus and the similar averages
+    //this block is not valid, some MCP signals have very low plateaus and similar averages
 //     bool boo = false;
 //     TF1 *fa0 = new TF1("fa0", "pol0(0)",0,511);
 //     histo->Fit(fa0,"0");
@@ -85,15 +85,17 @@ Int_t whichAuxChanIsTAC(TH1I* histo){ //is the TAC in the auxillary channel 1 or
     else if ((maxReached < 3000 && savePosition > 480) || (maxReached >= 3000 && savePosition < 480)){
         cout<<"\n\n================ WARNING ! ================\nRevise your TAC-or-MCP conditions !\n================ WARNING ! ================\n\n";
         globalNumberErrors++;
+        globalNumberOfTACchannelIDproblems++;
         return 2;
     }
     else {return 1;}
 }
 
 
-Int_t pileUp(TH1I* histo){
+//estimate pile-up by counting the number of TAC signals
+Int_t pileUp(TH1I* histo){ 
     TF1 *fa0 = new TF1("fa0", "pol0(0)",0,511);
-    histo->Fit(fa0,"0Q");
+    histo->Fit(fa0,"0Q"); //0: not drawing, Q: quiet
     Float_t barem = fa0->GetParameter(0)*1.33;
 //     cout<<"TAC test-value : "<<barem<<endl;
     delete fa0;
@@ -106,7 +108,8 @@ Int_t pileUp(TH1I* histo){
 }
 
 
-Double_t* locateTACsignal(TH1F* histo_input, Int_t howMany){
+//locate peaks' positions in data to prepare ID-ing the one(s) that are signal
+Double_t* locateTACsignal(TH1F* histo_input, Int_t howMany){ 
     Float_t rAtiO = 0.4;
     Float_t wIdTh = 3;
     Int_t rangeMin = 2;
@@ -130,8 +133,9 @@ Double_t* locateTACsignal(TH1F* histo_input, Int_t howMany){
     }
     return XPics;
 }
-   
 
+   
+//gives a rough estimate of the derivative at ((startingPoint+numberOfBins)-startingPoint)/2
 Float_t findDerivative(TH1F* histo_input, Double_t startingPoint, Int_t numberOfBins){
     if (numberOfBins > 0 && numberOfBins < 511/*histo_input->GetMaximumStored()*/){
         Float_t deri;
@@ -210,27 +214,29 @@ Int_t firstMacro(){
     bool drawNbrOfPadsVpeakHeight = false;
     bool drawNbrOfPadsVtac = false;
     
-    bool saveHistograms = false;            //NOTE : currently required to properly free up the memory used. Only falsefy when debugging
+    bool saveHistograms = false;            //NOTE WARNING: currently required to properly free up the memory used. Only falsefy when debugging
     
 //END---THE CONTRACT HAS BEEN SEALED, MORTAL. I SHALL NOW PROCEED...-----
     
     
     
   const Int_t derivativeCalcWindowSize = 5;
-  const Int_t estimatedWidth = 9.;              //estimated width of the track's beginning rising edge at high TimeBicket
+  const Int_t estimatedWidth = 9.;              //estimated width of the track's beginning rising edge at high TimeBucket
   const Int_t pointOfPeakRejection = 75;
   const Int_t EVENT = 0;    //run_0090/!\ 11602;  // 14030->60; /!\ 14030 & 14041 & 14048 & 14053(noDipBelow); /!\ 14031 & 14032 & 14052 (1TAC2Peak) 14078 (1TAC3peaks); /!\ 4041 & 14056 (weirdMCP) /!\ 14030 & 14053 & 14059 (singleShort)
   char eRrOr;
-  const Float_t meanBeamPeakHeight = 256.5;     //EDIT value on 02/04, prev.: 253.5;
-  const Float_t meanBeamCharge = 12095.5;       //EDIT value on 02/04, prev.: 11259.5;
+  const Float_t meanBeamPeakHeight = 256.5;     //EDIT value on 04 FEB 2020, prev. used: 253.5;
+  const Float_t meanBeamCharge = 12095.5;       //EDIT value on 04 FEB 2020, prev. used: 11259.5;
   const Float_t driftV = 20.;                   //mm/us
   const Float_t timeBucketSize = 0.160;         //us
   const Float_t Li7ChargePercentage = 0.2537;   //charge dep by Li7 as percentage Li8 beam charge
   const Float_t Li7peakHeight = 0.9998;         //bragg peak height of Li7 as percentage Li8 bragg peak height
   const Float_t Li7avTrLenght = 57.5;           //Li7 bragg peak position in Time Buckets
-  const int lengthOfConvolArray = 256;
+  const int lengthOfConvolArray = 256;          //length of the (de)convolution array
 
 
+  
+  //--ERRORS AND WARNINGS--------------------------------------------------
   if (fillIndividualChannels == false && drawIndividualChannels == true){cout<<"\n~~~~~~~~~~~~~~~~~~~~~WARNING !~~~~~~~~~~~~~~~~~~~\n\nY'need to read the channels to draw them, asshat.\nGo activate 'fillIndividualChannels' and try again.\n\n\tCan you manage to get THAT right, at least ?\n\n";return 0;}
   if (realignTracks == true && drawTBFeventRemanent == true && runOnTheCRC == false){
       cout<<"\nWARNING ! You asked for both the tracks to be re-aligned before drawing (realignTracks) AND for the tracks to be drawn without being re-aligned (drawTBFeventRemanent).\nDo you wish to proceed ? (y/n) : ";
@@ -240,13 +246,13 @@ Int_t firstMacro(){
       else {cout<<"\n... you think you're being funny ?\n\n\n\tYou. Aren't.\n\n";return 0;}
   }
   if (useFusionGates == true && (drawLengthVpeakHeight == false || drawLengthVtrackCharge == false || realignTracks == false)){
-      cout<<"\nWARNING\nFor now  please activate drawLengthVtrackCharge, drawLengthVpeakHeight & realignTracks to run useFusionGates. 'will patch later.\n\n";return 0;}
+      cout<<"\nWARNING\nFor now  please activate drawLengthVtrackCharge, drawLengthVpeakHeight & realignTracks to run useFusionGates. 'will patch that later.\n\n";return 0;}
   if (drawChargeVtac == true && drawLengthVtrackCharge == false){
       cout<<"\nWARNING ! 'drawChargeVtac == true && drawLengthVtrackCharge == false' is not a supported combo.\nPlease correct.\n\nThank you kindly.\n";return 0;}
   if (drawPeakHeightVtac == true && drawLengthVpeakHeight == false){
       cout<<"\nWARNING ! Asking for 'drawPeakHeightVtac == true && drawLengthVpeakHeight == false' ain't no good. Sorry.\n";return 0;}
   if ((draw3DTrack == true || drawDoubleProjectTrack == true) && realignTracks == false){cout<<"\nWell met, stranger. I hereby inform you that the options 'draw3DTrack' and 'drawDoubleProjectTrack' require option 'realignTracks' to be enabled, in order to be executed.\nThis message will now terminate your run.\n\nOur deepest apologies.\n";return 0;}
-
+ //------------------------------------------------------------------------
 
 
 
@@ -433,7 +439,7 @@ Int_t firstMacro(){
   //   TH1F* timeBucketForm = new TH1F("TBF", "channel 1;time bucket;Energy[arb.]",512,0,511);
 */
 
-  //def of (de)convolute
+  //--DEFINITION OF (DE)CONVOLUTION USTENSILS-------------------------------------
   float anArray1[lengthOfConvolArray],anArray3[lengthOfConvolArray], dataTest[lengthOfConvolArray], answerTest[2*lengthOfConvolArray];
   for (int i = 0;i<lengthOfConvolArray;i++){
       dataTest[i] = 2.0*TMath::Gaus(i,91,6);
@@ -465,17 +471,19 @@ Int_t firstMacro(){
   
   
   
-  //Def of variables /!\ mind that variable have to match for root extraction, storing Int_t->Double_t won't fly
+  //--DEFINITION OF VARIABLES FOR TREE /!\ variable have to match for root extraction, storing Int_t->Double_t won't fly
   Int_t num_hits;
   Int_t whatChan;
   Int_t data[2055][517];
   globalNumberErrors = 0;
   globalNumberOfPUevents = 0;
   globalNumberOfLongEvents = 0;
+  globalNumberOfTACchannelIDproblems = 0;
+  globalNumberOfMassiveEvents = 0;
   bool done = 0;
   Int_t auxChanDone = 0;
-  bool checkCleared = 0;                //WARNING when 'noPileUp condition relaxed, this check will be a problem
-  Int_t doubleCheckPU = 0;
+  bool checkCleared = 0;                //WARNING when 'no PileUp' condition gets relaxed, this check will be a problem
+  Int_t doubleCheckPU = 0;              //stores calculated pile-up value for double checking event
   Double_t* daPeak;
   Int_t tacPeak;
   Double_t TACval = 0;
@@ -494,8 +502,8 @@ Int_t firstMacro(){
 
   while (List >> WhichFile){
 	
-	FileName = WhichFile.c_str(); //TFile needs conversion to char
-	if (FileName[0] != '*'){//filenames commented by adding a '*' in front won't be read
+   FileName = WhichFile.c_str(); //TFile needs conversion to char
+   if (FileName[0] != '*'){//filenames commented by adding a '*' in front won't be read
    cout<<"\nOpening next file, "<<FileName<<", processing...\n";
    
         
@@ -509,11 +517,10 @@ Int_t firstMacro(){
     //IMPORTANT! structure: Cobo<< "\t" << Asad<< "\t" << Aget<< "\t" << Channel<< "\t" << PadNum
     
     //Recursively go through tree, getting "Fill" after "Fill"
-    
     for (Int_t i=EVENT; i</*EVENT+1000*/tree->GetEntries(); i++){
         tree->GetEntry(i);
         if (beQuite != 1) cout<<"\nEvent #"<<i<<", num_hits : "<<num_hits<<endl<<endl;
-        if (num_hits > 100){cout<<"\nWARNING, event "<<i<<"has too many entries.";globalNumberErrors++;}//TODO add proper error handeling
+        if (num_hits > 100){cout<<"\nWARNING, event "<<i<<"has too many entries.";globalNumberErrors++;globalNumberOfMassiveEvents++}
         
         //resetting variables/histograms
         auxChanDone = 0;
@@ -585,13 +592,13 @@ Int_t firstMacro(){
         if (pileUpInEvent == 1){ if (beQuite != 1) cout<<"\t-> Accepted"<<endl;}
         else {if (beQuite != 1){cout<<"\t-> Rejected"<<endl<<endl;} globalNumberOfPUevents++;}
         
-        if (done == 1 && pileUpInEvent == 1){//if at end of event+event was clean && no pile-up, perform last check; then add the average to the signal
+        if (done == 1 && pileUpInEvent == 1){//if at end of event, and event was clean && no pile-up, perform last check; then add the average to the signal
             preTBF->Add(timeBucketFormAveraged);
-            daPeak = locateTACsignal(timeBucketFormAveraged, pileUpInEvent+2);
+            daPeak = locateTACsignal(timeBucketFormAveraged, pileUpInEvent+2); //stores position of peaks found in the averaged TimeBucket-stored output
             if (beQuite != 1) cout<<"Watch : "<<daPeak[0]<<"\t"<<daPeak[1]<<"\t"<<daPeak[2]<<endl;
             for (int j=0;j<pileUpInEvent+2;j++){
                 if (daPeak[j] >=1 && daPeak[j] <= 513){doubleCheckPU++;}
-                else if (daPeak[j] >= 513){daPeakElement++;}//if you're here the real peak you wantnot the first, so go fetch next entry, not the first "peak" -> daPeak[daPeakElement] instead of daPeak[0]
+                else if (daPeak[j] >= 513){daPeakElement++;}//if you're here the real peak you want is not the first, so go fetch next entry, not the first "peak" -> daPeak[daPeakElement] instead of daPeak[0]
             }
             
             //Double-check pileUp
@@ -609,7 +616,7 @@ Int_t firstMacro(){
             
             //Get TAC value
             tacPeak = timeBucketFormAuxillary[(int)temp[0]]->GetMaximumBin();
-            TACval = timeBucketFormAuxillary[(int)temp[0]]->GetBinContent(tacPeak) - timeBucketFormAuxillary[(int)temp[0]]->GetBinContent(tacPeak-6);
+            TACval = timeBucketFormAuxillary[(int)temp[0]]->GetBinContent(tacPeak) - timeBucketFormAuxillary[(int)temp[0]]->GetBinContent(tacPeak-6); //get peak height, substract baseline
             if (beQuite != 1) cout<<"TAC position : "<<tacPeak<<"\tTAC value : "<<TACval<<endl;
             
             
@@ -649,10 +656,10 @@ Int_t firstMacro(){
                     }
                 }
                 
-                for (int p = howManyInDerivArray-3;p>0;p--){
-                    if (derivativeAverage[p] < -1.01){
+                for (int p = howManyInDerivArray-3;p>0;p--){// <- start from end of array
+                    if (derivativeAverage[p] < -1.01){ // <- gives start of track
                         if (beQuite != 1) cout<<"tentative : "<<p<<"\t"<<daPeak[daPeakElement]+(p+1)*5<<endl; //p +1(for stepping) 
-                        fa0->SetRange(daPeak[daPeakElement]+(p+1)*5+10,505);
+                        fa0->SetRange(daPeak[daPeakElement]+(p+1)*5+10,505); // <- select plateau at the end of the time bucket form
                         preTBF->Fit(fa0,"RQ");
 //                         cout<<"fa0->GetParameter(0), v3 = "<<fa0->GetParameter(0)<<endl;
                         fa0->SetRange(0,511);
@@ -679,7 +686,7 @@ Int_t firstMacro(){
                             
                             if (drawLengthVpeakHeight){
                                 if (useFusionGates == false){lengthVSheight->Fill((maxDerivativePosition[0]+estimatedWidth-maxDerivativePosition[1]),preTBF->GetMaximum());}
-                                else {
+                                else {//NOTE: hard-coded most conditions/gates
                                     for (line=15;line>=0;line--){
                                         if ((maxDerivativePosition[0]+estimatedWidth-maxDerivativePosition[1]) <= fusionCharac[line][3]/(driftV*timeBucketSize)){
                                             fusionTestValidated = 1;
@@ -699,7 +706,7 @@ Int_t firstMacro(){
                                 else {
                                     if (fusionTestValidated == true && temp[0]<92.545455*(maxDerivativePosition[0]+estimatedWidth-maxDerivativePosition[1])-755.81819){
                                         lengthVScharge->Fill(maxDerivativePosition[0]+estimatedWidth-maxDerivativePosition[1],preTBF->Integral/*AndError*/(maxDerivativePosition[1],maxDerivativePosition[0]+estimatedWidth,""));
-                                    }
+                                     }
                                 }
                                 if (drawChargeVtac){chargeVtac->Fill(preTBF->Integral/*AndError*/(maxDerivativePosition[1],maxDerivativePosition[0]+estimatedWidth,""),TACval);}
                             }
@@ -1122,9 +1129,10 @@ Int_t firstMacro(){
         }
   }
     
- cout<<"\n\nEnd of program reached, encountered "<<globalNumberErrors<<" non-terminal errors.\nThere were "<<globalNumberOfPUevents<<" rejected pile-up events.\nThere were "<<globalNumberOfLongEvents<<" rejected long events.\n";
+ cout<<"\n\nEnd of program reached, encountered "<<globalNumberErrors<<" non-terminal errors.\nThere were "<<globalNumberOfPUevents<<" rejected pile-up events.\nThere were "<<globalNumberOfLongEvents<<" rejected long events.\nThere were"<<globalNumberOfTACchannelIDproblems<<" events with unexpected TAC channel behaviour.\nThere were "<<globalNumberOfMassiveEvents<<" events with over a 100 fired channels.\n";
  delete preTBF;
  if (saveHistograms){
+     //TODO do you need the 'if's here ? shouldn't every object get deleted regardless ?
      if (drawAuxillaryChannels){ for (unsigned int divNumb=0;divNumb<6;divNumb++){ delete timeBucketFormAuxillary[divNumb];}}
      if (drawTBFeventRemanent){ delete TBFeventRemanent;}
      if (realignTracks){  delete TBFrealigned;}
