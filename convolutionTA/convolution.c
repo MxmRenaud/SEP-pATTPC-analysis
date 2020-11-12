@@ -5,7 +5,7 @@
 *	
 *	Description: convolution and de-convolution program. WARNING: compilation mandatory !
 *	             input isign = 1/-1 for convolution/deconvolution
-*	             arguments should be flaot data[LENGTH], isign, float ans[2*LENGTH], so code accordingly
+*	             arguments should be float data[LENGTH], isign, float ans[2*LENGTH], so code accordingly
 *
 *	Modified:    17 FEB 2019
 *               
@@ -13,7 +13,7 @@
 *	Modifier:    Maxime RENAUD, NSH, KUL-UND
 *
 * ================================================================
-* NOTE if run independently, one needs to create binary <foo>.o for all five of the "include files", and comment those "include".
+* NOTE if run independently, one needs to create one binary <foo>.o for each of the five "include files", and comment their respective "#include <foo>".
 */ 
 
 

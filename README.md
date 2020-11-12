@@ -8,6 +8,6 @@ A set of extra variables containing constants for the runtime is found right und
 
 It does require an extra file containing the list of runs to be read.
 
-DISCLAIMER/WARNING: some of the error messages are needlessly rude/aggressive. Will be fixed once calmer waters have been reached.
+DISCLAIMER/WARNING: some of the error messages are needlessly rude/aggressive; know they were intended for the author of the code, not the user. Regardless, this will be fixed once calmer waters have been reached (i.e. once the author gets it together).
 
 

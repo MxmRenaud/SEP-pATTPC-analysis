@@ -51,11 +51,12 @@
 #include <cstring>
 #include <TClass.h>
 
-#include "convolutionTA/convolution.c"
+// #include "convolutionTA/convolution.c"
 
 
 using namespace std;
 
+Int_t globalNumberOfEvents;
 Int_t globalNumberErrors;
 Int_t globalNumberOfPUevents;
 Int_t globalNumberOfLongEvents;
@@ -184,22 +185,22 @@ Int_t firstMacro(){
 //END---------WHAT DO Y0U WISH TO DO HERE, MORTAL ? -------------------
     
     bool runOnTheCRC = false;               //deactivates mandatory user input & adapt file paths NOTE not optimal for the latter part.
-    bool multiRunAnalysis = false;           //select between two files (here 'list-preAnal.txt' and 'list-analysis.txt') for convenience in swtching between debugging/actual run
+    bool multiRunAnalysis = false;           //select between two lists of files (here 'list-preAnal.txt' and 'list-analysis.txt') for convenience in switching between debugging/actual run
     
     bool fillIndividualChannels = false;
     bool realignTracks = true;              //BEST TRACK LENGTH FINDING ALGORYTHM IS LOCKED IN HERE, as well
     bool acceptPeaksBelowBeam = false;      // do you want to keep events that peak much further than the primary beam ? see 'pointOfPeakRejection' Will exclude most events that are just noise and some disintegration events.
     bool useFusionGates = false;            //attempt to only keep events fulfilling certain conditions [hard-coded atm] TODO change that
     bool substractBckgrd = true;
-    bool beQuite = true;                    //reduced terminal output
-    bool addSignalCharacOnPlots = false;    //plot expected values for fusion/contaminants on some of the data plots.
+    bool beQuite = true;                   //reduced terminal output
+    bool addSignalCharacOnPlots = true;     //plot expected values for fusion/contaminants on some of the data plots.
     bool deconvoluteThis = false;           //deconvolute data before any plotting WARNING currently very unstable option
     
     bool drawWhichPadIsIt = false;
     bool drawIndividualChannels = false;
     bool drawSummedChannels = false;        //sums all channels of a single event into a track and draw.
     bool drawAuxillaryChannels = false;
-    bool drawTBFeventRemanent = false;      //drawTimeBucketFormatEventRemanent = draw a summed profile of all tracks for all events
+    bool drawTBFeventRemanent = true;       //drawTimeBucketFormatEventRemanent = draw a summed profile of all tracks for all events
     bool drawDerivatives = false;           //NOTE : Hard-coded for only one event at a time
     bool drawLengthVpeakHeight = false;
     bool drawLengthVtrackCharge = false;
@@ -210,9 +211,9 @@ Int_t firstMacro(){
     bool drawChargeVpeakHeight = false;
     bool draw3DTrack = false;               //NOTE : Hard-coded for only one event at a time
     bool drawDoubleProjectTrack = false; 
-    bool drawNbrOfPadsVcharge = false; 
-    bool drawNbrOfPadsVpeakHeight = false;
-    bool drawNbrOfPadsVtac = false;
+    bool drawNbrOfPadsVcharge = true; 
+    bool drawNbrOfPadsVpeakHeight = true;
+    bool drawNbrOfPadsVtac = true;
     
     bool saveHistograms = false;            //NOTE WARNING: currently required to properly free up the memory used. Only falsefy when debugging
     
@@ -246,7 +247,7 @@ Int_t firstMacro(){
       else {cout<<"\n... you think you're being funny ?\n\n\n\tYou. Aren't.\n\n";return 0;}
   }
   if (useFusionGates == true && (drawLengthVpeakHeight == false || drawLengthVtrackCharge == false || realignTracks == false)){
-      cout<<"\nWARNING\nFor now  please activate drawLengthVtrackCharge, drawLengthVpeakHeight & realignTracks to run useFusionGates. 'will patch that later.\n\n";return 0;}
+      cout<<"\nWARNING\nFor now  please activate drawLengthVtrackCharge, drawLengthVpeakHeight & realignTracks to run useFusionGates. 'may patch that later.\n\n";return 0;}
   if (drawChargeVtac == true && drawLengthVtrackCharge == false){
       cout<<"\nWARNING ! 'drawChargeVtac == true && drawLengthVtrackCharge == false' is not a supported combo.\nPlease correct.\n\nThank you kindly.\n";return 0;}
   if (drawPeakHeightVtac == true && drawLengthVpeakHeight == false){
@@ -349,6 +350,7 @@ Int_t firstMacro(){
   TH2F* nbrOfPadsVtac;
   TH2F* nbrOfPadsVcharge;
   TH2F* nbrOfPadsVpeakHeight;
+  TH1F* deconvolutedProfile;
   
   timeBucketFormAveraged = new TH1F("TBFAv","Averaged channels;time bucket;Energy[arb.]",512,0,511);
   timeBucketFormAveraged->Fill(0.);
@@ -391,6 +393,7 @@ Int_t firstMacro(){
   if (drawNbrOfPadsVpeakHeight == true && substractBckgrd == true) nbrOfPadsVpeakHeight = new TH2F("padsVpeakHeight","#pads V. peak Height;#fired pads;max peak height [arb]",150,0,149,700,0,700);
   if (drawNbrOfPadsVpeakHeight == true && substractBckgrd == false) nbrOfPadsVpeakHeight = new TH2F("padsVpeakHeight","#pads V. peak Height;#fired pads;max peak height [arb]",150,0,149,1100,0,1100);
   if (drawNbrOfPadsVtac) nbrOfPadsVtac = new TH2F("padsVtac","#pads V. TAC;#fired pads;tac [arb]",150,0,149,850,0,850);
+  if (deconvoluteThis) deconvolutedProfile = new TH1F("deconvolutedProfile","Deconv. profile;time bucket;Energy[arb]",512,0,511);
 
   
 
@@ -441,14 +444,16 @@ Int_t firstMacro(){
 
   //--DEFINITION OF (DE)CONVOLUTION USTENSILS-------------------------------------
   float anArray1[lengthOfConvolArray],anArray3[lengthOfConvolArray], dataTest[lengthOfConvolArray], answerTest[2*lengthOfConvolArray];
-  for (int i = 0;i<lengthOfConvolArray;i++){
-      dataTest[i] = 2.0*TMath::Gaus(i,91,6);
-      anArray1[i] = i;
-      anArray3[i] = i;
-//       anArray3[lengthOfConvolArray+i] = lengthOfConvolArray+i;
+  if (deconvoluteThis){
+      for (int i = 0;i<lengthOfConvolArray;i++){
+//           dataTest[i] = 2.0*TMath::Gaus(i,91,6);
+          anArray1[i] = i;
+          anArray3[i] = i;
+//           anArray3[lengthOfConvolArray+i] = lengthOfConvolArray+i;
+      }
   }
   
-  const float *theArray1 = anArray1;
+/*  const float *theArray1 = anArray1;
   const float *theArray3 = anArray3;
   const float *dataTest2 = dataTest;
   TGraph* grD = new TGraph(lengthOfConvolArray,anArray1,dataTest2);
@@ -465,7 +470,7 @@ Int_t firstMacro(){
   grA->SetLineColor(kGreen);
   grA->Draw("same");
   
-  return 0;
+  return 0;*/
   
   
   
@@ -475,6 +480,7 @@ Int_t firstMacro(){
   Int_t num_hits;
   Int_t whatChan;
   Int_t data[2055][517];
+  globalNumberOfEvents = 0;
   globalNumberErrors = 0;
   globalNumberOfPUevents = 0;
   globalNumberOfLongEvents = 0;
@@ -517,10 +523,13 @@ Int_t firstMacro(){
     //IMPORTANT! structure: Cobo<< "\t" << Asad<< "\t" << Aget<< "\t" << Channel<< "\t" << PadNum
     
     //Recursively go through tree, getting "Fill" after "Fill"
-    for (Int_t i=EVENT; i</*EVENT+1000*/tree->GetEntries(); i++){
+    for (Int_t i=EVENT; i</*EVENT+10*/tree->GetEntries(); i++){
+        
+        globalNumberOfEvents++;
+        
         tree->GetEntry(i);
         if (beQuite != 1) cout<<"\nEvent #"<<i<<", num_hits : "<<num_hits<<endl<<endl;
-        if (num_hits > 100){cout<<"\nWARNING, event "<<i<<"has too many entries.";globalNumberErrors++;globalNumberOfMassiveEvents++}
+        if (num_hits-6 > 100){cout<<"\nWARNING, event "<<i<<"has too many entries.";globalNumberErrors++;globalNumberOfMassiveEvents++;}
         
         //resetting variables/histograms
         auxChanDone = 0;
@@ -546,7 +555,7 @@ Int_t firstMacro(){
 
         
         //loop through channels in event
-        for (Int_t j=0; j<num_hits; j++) {
+        for (Int_t j=0; j<num_hits; j++) { //NOTE: num_hits = number of stored channels + 6 auxillary channels
             
             done = 0;
             
@@ -577,7 +586,7 @@ Int_t firstMacro(){
                     if(k==516){auxChanDone++;} //move to next histogram
                 }
                 else if(auxChanDone >= 6){cout<<"\nError, which is sad.\nAnd 'sad' backwards is 'das', and das not good...\nLook at the Auxillaries.\n";return 0;}
-                if (k>5 && projectionTrackLimit <10 && (draw3DTrack == true || drawDoubleProjectTrack == true) /*&& did3DtrackGetMade == false*/ && num_hits <100){
+                if (k>5 && projectionTrackLimit <10 && (draw3DTrack == true || drawDoubleProjectTrack == true) /*&& did3DtrackGetMade == false*/ && num_hits-6 <100){
                     padsPosition[j][k-4][0] = mapp[checkTrack3D][5];
                     padsPosition[j][k-4][1] = mapp[checkTrack3D][6];
                 }
@@ -686,7 +695,7 @@ Int_t firstMacro(){
                             
                             if (drawLengthVpeakHeight){
                                 if (useFusionGates == false){lengthVSheight->Fill((maxDerivativePosition[0]+estimatedWidth-maxDerivativePosition[1]),preTBF->GetMaximum());}
-                                else {//NOTE: hard-coded most conditions/gates
+                                else {//NOTE: Only keep events compatible with theoretical peak height. 
                                     for (line=15;line>=0;line--){
                                         if ((maxDerivativePosition[0]+estimatedWidth-maxDerivativePosition[1]) <= fusionCharac[line][3]/(driftV*timeBucketSize)){
                                             fusionTestValidated = 1;
@@ -695,8 +704,10 @@ Int_t firstMacro(){
                                         }
                                         globalNumberOfLongEvents++;
                                     }
-                                    //current condition : >=90% of calculated peak height, and <=110% of calculated charge
-                                    if (fusionTestValidated == true && temp[0]<92.545455*(maxDerivativePosition[0]+estimatedWidth-maxDerivativePosition[1])-755.81819){lengthVSheight->Fill(maxDerivativePosition[0]+estimatedWidth-maxDerivativePosition[1],preTBF->GetMaximum());}
+                                    //WARNING hard-coded most conditions/gates. Current condition : <=92.5% of calculated charge
+                                    if (fusionTestValidated == true && temp[0]<92.545455*(maxDerivativePosition[0]+estimatedWidth-maxDerivativePosition[1])-755.81819){
+                                        lengthVSheight->Fill(maxDerivativePosition[0]+estimatedWidth-maxDerivativePosition[1],preTBF->GetMaximum());
+                                    }
                                 }
                                 if (drawPeakHeightVtac){peakHeightVtac->Fill(preTBF->GetMaximum(),TACval);}
                             }
@@ -715,7 +726,7 @@ Int_t firstMacro(){
                             
                             if (drawChargeVpeakHeight){chargeVpeakHeight->Fill(preTBF->Integral/*AndError*/(maxDerivativePosition[1],maxDerivativePosition[0]+estimatedWidth,""),preTBF->GetMaximum());}
                             
-                            if (draw3DTrack == true && num_hits < 100){
+                            if (draw3DTrack == true && num_hits-6 < 100){
                                 for (int i=0;i<num_hits;i++){
                                     for (int j=maxDerivativePosition[1];j<maxDerivativePosition[0]+estimatedWidth;j++){
                                         track3D->Fill(j+(510-maxDerivativePosition[0]+estimatedWidth),padsPosition[i][j][0],padsPosition[i][j][1]);
@@ -724,7 +735,7 @@ Int_t firstMacro(){
                                 did3DtrackGetMade = true;
                                 draw3DTrack = false;
                             }
-                            else if (draw3DTrack == true && num_hits >= 100){
+                            else if (draw3DTrack == true && num_hits-6 >= 100){
                                 if (!beQuite) cout<<"\nWARNING ! Event incompatible with 'draw3DTrack' option. Dropping option.\n";
                                 draw3DTrack = false; //TODO change to allow for next track to be selected
                             }
@@ -739,9 +750,15 @@ Int_t firstMacro(){
                                 projectionTrackLimit++;
                             }
                             
-                            if (drawNbrOfPadsVcharge){ nbrOfPadsVcharge->Fill(num_hits,preTBF->Integral/*AndError*/(maxDerivativePosition[1],maxDerivativePosition[0]+estimatedWidth,""));}
-                            if (drawNbrOfPadsVtac){ nbrOfPadsVtac->Fill(num_hits,TACval);}
-                            if (drawNbrOfPadsVpeakHeight){ nbrOfPadsVpeakHeight->Fill(num_hits,preTBF->GetMaximum());}
+                            if (drawNbrOfPadsVcharge){ nbrOfPadsVcharge->Fill(num_hits-6,preTBF->Integral/*AndError*/(maxDerivativePosition[1],maxDerivativePosition[0]+estimatedWidth,""));}
+                            if (drawNbrOfPadsVtac){ nbrOfPadsVtac->Fill(num_hits-6,TACval);}
+                            if (drawNbrOfPadsVpeakHeight){ nbrOfPadsVpeakHeight->Fill(num_hits-6,preTBF->GetMaximum());}
+                            
+                            if (deconvoluteThis){
+                                for (int i=maxDerivativePosition[1];i<maxDerivativePosition[0]+estimatedWidth-maxDerivativePosition[1];i++){
+                                    
+                                }
+                            }
                             
                         }// END 'realignTracks'
                         else if (drawLengthVpeakHeight == true && realignTracks == false){
@@ -755,11 +772,12 @@ Int_t firstMacro(){
                         if (realignTracks == false && drawLengthVbackgrd == true) lengthVbackground->Fill((daPeak[daPeakElement]+(p+1)*5-(daPeak[daPeakElement]-10)),temp[2]);
                         if (realignTracks == false && drawLengthVtac == true) lengthVtac->Fill((daPeak[daPeakElement]+(p+1)*5-(daPeak[daPeakElement]-10)),TACval);
                         if (realignTracks == false && drawChargeVpeakHeight == true){chargeVpeakHeight->Fill(preTBF->Integral/*AndError*/(daPeak[daPeakElement]-10,daPeak[daPeakElement]+(p+1)*5,""),preTBF->GetMaximum());}
-                        if (realignTracks == false && drawNbrOfPadsVcharge == true){nbrOfPadsVcharge->Fill(num_hits,preTBF->Integral/*AndError*/(daPeak[daPeakElement]-10,daPeak[daPeakElement]+(p+1)*5,""));}
-                        if (realignTracks == false && drawNbrOfPadsVpeakHeight == true){nbrOfPadsVpeakHeight->Fill(num_hits,preTBF->GetMaximum());}
-                        if (realignTracks == false && drawNbrOfPadsVtac == true){nbrOfPadsVtac->Fill(num_hits,TACval);}
+                        if (realignTracks == false && drawNbrOfPadsVcharge == true){nbrOfPadsVcharge->Fill(num_hits-6,preTBF->Integral/*AndError*/(daPeak[daPeakElement]-10,daPeak[daPeakElement]+(p+1)*5,""));}
+                        if (realignTracks == false && drawNbrOfPadsVpeakHeight == true){nbrOfPadsVpeakHeight->Fill(num_hits-6,preTBF->GetMaximum());}
+                        if (realignTracks == false && drawNbrOfPadsVtac == true){nbrOfPadsVtac->Fill(num_hits-6,TACval);}
+
                         
-                        p = 1; //break;
+                        p = 1; //break out of the "for (int p = howManyInDerivArray-3;p>0;p--)" loop
                     }
                 }
                 
@@ -1129,7 +1147,7 @@ Int_t firstMacro(){
         }
   }
     
- cout<<"\n\nEnd of program reached, encountered "<<globalNumberErrors<<" non-terminal errors.\nThere were "<<globalNumberOfPUevents<<" rejected pile-up events.\nThere were "<<globalNumberOfLongEvents<<" rejected long events.\nThere were"<<globalNumberOfTACchannelIDproblems<<" events with unexpected TAC channel behaviour.\nThere were "<<globalNumberOfMassiveEvents<<" events with over a 100 fired channels.\n";
+ cout<<"\n\nEnd of program reached, handled "<<globalNumberOfEvents<<" events.\nEncountered "<<globalNumberErrors<<" non-terminal errors.\nThere were "<<globalNumberOfPUevents<<" rejected pile-up events.\nThere were "<<globalNumberOfLongEvents<<" rejected long events.\nThere were "<<globalNumberOfTACchannelIDproblems<<" events with unexpected TAC channel behaviour.\nThere were "<<globalNumberOfMassiveEvents<<" events with over a 100 fired channels.\n";
  delete preTBF;
  if (saveHistograms){
      //TODO do you need the 'if's here ? shouldn't every object get deleted regardless ?
