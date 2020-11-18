@@ -1,2 +1,1 @@
-/home/mrenaud1/Public/converted/run_0090.root
-
+/afs/crc/group/nsl/activetarget/data/TPC_Sepyember_2019/rootConverted/run_0090.root
