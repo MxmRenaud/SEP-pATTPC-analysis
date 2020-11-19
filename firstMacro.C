@@ -188,19 +188,20 @@ Int_t firstMacro(){
     bool multiRunAnalysis = false;           //select between two lists of files (here 'list-preAnal.txt' and 'list-analysis.txt') for convenience in switching between debugging/actual run
     
     bool fillIndividualChannels = false;
-    bool realignTracks = true;              //BEST TRACK LENGTH FINDING ALGORYTHM IS LOCKED IN HERE, as well
+    bool realignTracks = false;              //BEST TRACK LENGTH FINDING ALGORYTHM IS LOCKED IN HERE, as well
     bool acceptPeaksBelowBeam = false;      // do you want to keep events that peak much further than the primary beam ? see 'pointOfPeakRejection' Will exclude most events that are just noise and some disintegration events.
     bool useFusionGates = false;            //attempt to only keep events fulfilling certain conditions [hard-coded atm] TODO change that
+    bool usePadsGates = true;              //only keep events with less than "maxNbrOfPadsFired" pads fired (WARNING not including 6 auxillary channels !)
     bool substractBckgrd = true;
     bool beQuite = true;                   //reduced terminal output
-    bool addSignalCharacOnPlots = true;     //plot expected values for fusion/contaminants on some of the data plots.
+    bool addSignalCharacOnPlots = false;     //plot expected values for fusion/contaminants on some of the data plots.
     bool deconvoluteThis = false;           //deconvolute data before any plotting WARNING currently very unstable option
     
     bool drawWhichPadIsIt = false;
     bool drawIndividualChannels = false;
     bool drawSummedChannels = false;        //sums all channels of a single event into a track and draw.
     bool drawAuxillaryChannels = false;
-    bool drawTBFeventRemanent = true;       //drawTimeBucketFormatEventRemanent = draw a summed profile of all tracks for all events
+    bool drawTBFeventRemanent = false;       //drawTimeBucketFormatEventRemanent = draw a summed profile of all tracks for all events
     bool drawDerivatives = false;           //NOTE : Hard-coded for only one event at a time
     bool drawLengthVpeakHeight = false;
     bool drawLengthVtrackCharge = false;
@@ -215,7 +216,7 @@ Int_t firstMacro(){
     bool drawNbrOfPadsVpeakHeight = true;
     bool drawNbrOfPadsVtac = true;
     
-    bool saveHistograms = false;            //NOTE WARNING: currently required to properly free up the memory used. Only falsefy when debugging
+    bool saveHistograms = true;            //NOTE WARNING: currently required to properly free up the memory used. Only falsefy when debugging
     
 //END---THE CONTRACT HAS BEEN SEALED, MORTAL. I SHALL NOW PROCEED...-----
     
@@ -234,6 +235,7 @@ Int_t firstMacro(){
   const Float_t Li7peakHeight = 0.9998;         //bragg peak height of Li7 as percentage Li8 bragg peak height
   const Float_t Li7avTrLenght = 57.5;           //Li7 bragg peak position in Time Buckets
   const int lengthOfConvolArray = 256;          //length of the (de)convolution array
+  const Int_t maxNbrOfPadsFired = 15;           //user-defined limit to keep only events with straight tracks (no scattering, diffusion, decay, etc)
 
 
   
@@ -247,12 +249,21 @@ Int_t firstMacro(){
       else {cout<<"\n... you think you're being funny ?\n\n\n\tYou. Aren't.\n\n";return 0;}
   }
   if (useFusionGates == true && (drawLengthVpeakHeight == false || drawLengthVtrackCharge == false || realignTracks == false)){
-      cout<<"\nWARNING\nFor now  please activate drawLengthVtrackCharge, drawLengthVpeakHeight & realignTracks to run useFusionGates. 'may patch that later.\n\n";return 0;}
+      cout<<"\nWARNING\nFor now  please activate drawLengthVtrackCharge, drawLengthVpeakHeight & realignTracks to run useFusionGates. 'may patch that later.\n\n";
+      return 0;
+  }
   if (drawChargeVtac == true && drawLengthVtrackCharge == false){
-      cout<<"\nWARNING ! 'drawChargeVtac == true && drawLengthVtrackCharge == false' is not a supported combo.\nPlease correct.\n\nThank you kindly.\n";return 0;}
+      cout<<"\nWARNING ! 'drawChargeVtac == true && drawLengthVtrackCharge == false' is not a supported combo.\nPlease correct.\n\nThank you kindly.\n";
+      return 0;
+  }
   if (drawPeakHeightVtac == true && drawLengthVpeakHeight == false){
-      cout<<"\nWARNING ! Asking for 'drawPeakHeightVtac == true && drawLengthVpeakHeight == false' ain't no good. Sorry.\n";return 0;}
-  if ((draw3DTrack == true || drawDoubleProjectTrack == true) && realignTracks == false){cout<<"\nWell met, stranger. I hereby inform you that the options 'draw3DTrack' and 'drawDoubleProjectTrack' require option 'realignTracks' to be enabled, in order to be executed.\nThis message will now terminate your run.\n\nOur deepest apologies.\n";return 0;}
+      cout<<"\nWARNING ! Asking for 'drawPeakHeightVtac == true && drawLengthVpeakHeight == false' ain't no good. Sorry.\n";
+      return 0;
+  }
+  if ((draw3DTrack == true || drawDoubleProjectTrack == true) && realignTracks == false){
+      cout<<"\nWell met, stranger. I hereby inform you that the options 'draw3DTrack' and 'drawDoubleProjectTrack' require option 'realignTracks' to be enabled, in order to be executed.\nThis message will now terminate your run.\n\nOur deepest apologies.\n";
+      return 0;
+  }
  //------------------------------------------------------------------------
 
 
@@ -523,7 +534,7 @@ Int_t firstMacro(){
     //IMPORTANT! structure: Cobo<< "\t" << Asad<< "\t" << Aget<< "\t" << Channel<< "\t" << PadNum
     
     //Recursively go through tree, getting "Fill" after "Fill"
-    for (Int_t i=EVENT; i</*EVENT+10*/tree->GetEntries(); i++){
+    for (Int_t i=EVENT; i<EVENT+10000/*tree->GetEntries()*/; i++){
         
         globalNumberOfEvents++;
         
@@ -628,7 +639,11 @@ Int_t firstMacro(){
             TACval = timeBucketFormAuxillary[(int)temp[0]]->GetBinContent(tacPeak) - timeBucketFormAuxillary[(int)temp[0]]->GetBinContent(tacPeak-6); //get peak height, substract baseline
             if (beQuite != 1) cout<<"TAC position : "<<tacPeak<<"\tTAC value : "<<TACval<<endl;
             
-            
+            //check number of fired Pads
+            if (usePadsGates == true && (num_hits-6 > maxNbrOfPadsFired)){
+                checkCleared = 0;
+                if (beQuite != 1){cout<<"\n\tWARNING ! Too many fired pads : "<<num_hits-6<<" > "<<maxNbrOfPadsFired<<".\t-> Rejected"<<endl<<endl;}
+            }
             
             if (checkCleared == 1){//actual clean & treatement
                 temp[0]=0;
@@ -694,7 +709,10 @@ Int_t firstMacro(){
                             if (drawLengthVbackgrd) lengthVbackground->Fill(maxDerivativePosition[0]+estimatedWidth-maxDerivativePosition[1],temp[2]); //temp[2] holds the background/baseline
                             
                             if (drawLengthVpeakHeight){
-                                if (useFusionGates == false){lengthVSheight->Fill((maxDerivativePosition[0]+estimatedWidth-maxDerivativePosition[1]),preTBF->GetMaximum());}
+                                if (useFusionGates == false){
+                                    lengthVSheight->Fill((maxDerivativePosition[0]+estimatedWidth-maxDerivativePosition[1]),preTBF->GetMaximum());
+                                    if (drawPeakHeightVtac){peakHeightVtac->Fill(preTBF->GetMaximum(),TACval);}
+                                }
                                 else {//NOTE: Only keep events compatible with theoretical peak height. 
                                     for (line=15;line>=0;line--){
                                         if ((maxDerivativePosition[0]+estimatedWidth-maxDerivativePosition[1]) <= fusionCharac[line][3]/(driftV*timeBucketSize)){
@@ -708,8 +726,8 @@ Int_t firstMacro(){
                                     if (fusionTestValidated == true && temp[0]<92.545455*(maxDerivativePosition[0]+estimatedWidth-maxDerivativePosition[1])-755.81819){
                                         lengthVSheight->Fill(maxDerivativePosition[0]+estimatedWidth-maxDerivativePosition[1],preTBF->GetMaximum());
                                     }
+                                    if (drawPeakHeightVtac){peakHeightVtac->Fill(preTBF->GetMaximum(),TACval);}
                                 }
-                                if (drawPeakHeightVtac){peakHeightVtac->Fill(preTBF->GetMaximum(),TACval);}
                             }
                             
                             if (drawLengthVtrackCharge){
@@ -854,7 +872,7 @@ Int_t firstMacro(){
   
   //save path definition
   string fStreamNameS;
-  if (runOnTheCRC == false){fStreamName = "/home/mrenaud1/Documents/Li8Analysis/requestedGraphs/autoSaved-";}
+  if (runOnTheCRC == false){fStreamName = "/home/maxime/Documents/Assistanat-KUL/Halo_Reactions-thesis/ExpNDSEP/Li8analysis/requestedGraphs/autoSaved-padTest-";}
   else {fStreamName = "/afs/crc.nd.edu/user/m/mrenaud1/Public/stockageGraphAnal/autoSaved-";}
   //prepare for point additions
   float_t ptx[numberOfEnergies], pty[numberOfEnergies], ptz[numberOfEnergies];
@@ -1116,7 +1134,7 @@ Int_t firstMacro(){
         CNbrVQ->SetLogz();
         nbrOfPadsVcharge->Draw("colz");
         if (saveHistograms){
-            fStreamNameS = fStreamName + "nbrOfPadsVcharge.root";
+            fStreamNameS = fStreamName + "nbrOfPads-6Vcharge.root";
             const char *nameCNbrVQ = fStreamNameS.c_str(); //WARNING http://www.cplusplus.com/forum/general/100714/
             CNbrVQ->SaveAs(nameCNbrVQ);
             delete CNbrVQ;
@@ -1128,7 +1146,7 @@ Int_t firstMacro(){
         CNbrVTAC->SetLogz();
         nbrOfPadsVtac->Draw("colz");
         if (saveHistograms){
-            fStreamNameS = fStreamName + "nbrOfPadsVtac.root";
+            fStreamNameS = fStreamName + "nbrOfPads-6Vtac.root";
             const char *nameCNbrVTAC = fStreamNameS.c_str(); //WARNING http://www.cplusplus.com/forum/general/100714/
             CNbrVTAC->SaveAs(nameCNbrVTAC);
             delete CNbrVTAC;
@@ -1140,7 +1158,7 @@ Int_t firstMacro(){
         CNbrVPH->SetLogz();
         nbrOfPadsVpeakHeight->Draw("colz");
         if (saveHistograms){
-            fStreamNameS = fStreamName + "nbrOfPadsVpeakHeight.root";
+            fStreamNameS = fStreamName + "nbrOfPads-6VpeakHeight.root";
             const char *nameCNbrVPH = fStreamNameS.c_str(); //WARNING http://www.cplusplus.com/forum/general/100714/
             CNbrVPH->SaveAs(nameCNbrVPH);
             delete CNbrVPH;
