@@ -212,7 +212,7 @@ Int_t firstMacro(){
     bool drawPeakHeightVtac = true;
     bool drawChargeVpeakHeight = true;
     bool draw3DTrack = false;               //NOTE : Hard-coded for only one event at a time
-    bool drawDoubleProjectTrack = true; 
+    bool drawDoubleProjectTrack = false; 
     bool drawNbrOfPadsVcharge = true; 
     bool drawNbrOfPadsVpeakHeight = true;
     bool drawNbrOfPadsVtac = true;
@@ -608,7 +608,7 @@ Int_t firstMacro(){
                     timeBucketFormAuxillary[auxChanDone]->SetBinContent(k-5,data[j][k]);
                     if(k==516){auxChanDone++;} //move to next histogram
                 }
-                else if(auxChanDone >= 6){cout<<"\nError, which is sad.\nAnd 'sad' backwards is 'das', and das not good...\nLook at the Auxillaries.\n";return 0;}
+                else if(auxChanDone >= 6){cout<<"\nError, which is sad.\nAnd 'sad' backwards is 'das', and das not good...\nLook at the Auxillaries.\n";if (trackBizarTACevents == true){ListTAC<<WhichFile<<"\t"<<i<<endl;} return 0;}
                 if (k>5 && projectionTrackLimit <10 && (draw3DTrack == true || drawDoubleProjectTrack == true) /*&& did3DtrackGetMade == false*/ && num_hits-6 <100){
                     padsPosition[j][k-4][0] = mapp[checkTrack3D][5];
                     padsPosition[j][k-4][1] = mapp[checkTrack3D][6];
@@ -620,7 +620,7 @@ Int_t firstMacro(){
         num_hits = num_hits-(auxChanDone+1); //remove the auxillary channels from counting the number of fired pads
         temp[0] = whichAuxChanIsTAC(timeBucketFormAuxillary[1]);
         if (temp[0] == 3){ //keeps track of events with problematic TAC or MCP in separate file
-            if (trackBizarTACevents == true){ ListTAC<<WhichFile<<"\t"<<EVENT<<endl;}
+            if (trackBizarTACevents == true){ ListTAC<<WhichFile<<"\t"<<i<<endl;}
             temp[0] = 2;
         }
         Int_t pileUpInEvent = pileUp(timeBucketFormAuxillary[(int)temp[0]]);
@@ -956,12 +956,18 @@ Int_t firstMacro(){
   
   if (drawAuxillaryChannels){
     TCanvas* CauxChan = new TCanvas("CauxChan","CauxChan",800,800);
-        CauxChan->Divide(2,3);
+        CauxChan->Divide(3,3);
         CauxChan->ToggleEventStatus();
         for (unsigned int divNumb=1;divNumb<7;divNumb++){
             CauxChan->cd(divNumb);
             timeBucketFormAuxillary[divNumb-1]->Draw();
         }
+	if (saveHistograms){
+	    fStreamNameS = fStreamName + "timeBucketFormAuxillary.root";
+	    const char *nameCauxChan = fStreamNameS.c_str(); //WARNING http://www.cplusplus.com/forum/general/100714
+	    CauxChan->SaveAs(nameCauxChan);
+	    delete CauxChan;
+	}
   }
   else {delete *timeBucketFormAuxillary;}
   
