@@ -340,7 +340,7 @@ Int_t firstMacro(){
   else {fStreamName = "listOfTACproblemEvents.txt";}
   fListTACproblems = fStreamName.c_str(); //WARNING http://www.cplusplus.com/forum/general/100714/
   ofstream ListTAC(fListTACproblems);
-  if (ListTac.is_open() == false){
+  if (ListTAC.is_open() == false){
       cout<<"\nWarning ! Failed to create or open listOfTACproblemEvents.txt, please start grumbling at your earliest convenience.\n";
       return 0;
   }
