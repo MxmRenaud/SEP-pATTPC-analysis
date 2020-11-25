@@ -63,7 +63,7 @@ Int_t globalNumberOfLongEvents;
 Int_t globalNumberOfTACchannelIDproblems;
 Int_t globalNumberOfMassiveEvents;
 
-Int_t whichAuxChanIsTAC(TH1I* histo){ //is the TAC in the auxillary channel 1 or 2 ?
+Int_t whichAuxChanIsTAC(TH1I* histo, bool quiet){ //is the TAC in the auxillary channel 1 or 2 ?
     //this block is not valid, some MCP signals have very low plateaus and similar averages
 //     bool boo = false;
 //     TF1 *fa0 = new TF1("fa0", "pol0(0)",0,511);
@@ -84,7 +84,7 @@ Int_t whichAuxChanIsTAC(TH1I* histo){ //is the TAC in the auxillary channel 1 or
     }
     if (maxReached >= 3000 && savePosition > 480){return 2;}
     else if ((maxReached < 3000 && savePosition > 480) || (maxReached >= 3000 && savePosition < 480)){
-        cout<<"\n\n================ WARNING ! ================\nRevise your TAC-or-MCP conditions !\n================ WARNING ! ================\n\n";
+        if (quiet == false) {cout<<"\n\n================ WARNING ! ================\nRevise your TAC-or-MCP conditions !\n================ WARNING ! ================\n\n";}
         globalNumberErrors++;
         globalNumberOfTACchannelIDproblems++;
         return 3;
@@ -193,7 +193,7 @@ Int_t firstMacro(){
     bool useFusionGates = false;            //attempt to only keep events fulfilling certain conditions [hard-coded atm] TODO change that
     bool usePadsGates = true;              //only keep events with less than "maxNbrOfPadsFired" pads fired (WARNING not including 6 auxillary channels !)
     bool substractBckgrd = true;
-    bool beQuite = true;                   //reduced terminal output
+    bool beQuiet = true;                   //reduced terminal output
     bool addSignalCharacOnPlots = true;     //plot expected values for fusion/contaminants on some of the data plots.
     bool trackBizarTACevents = true;
     bool deconvoluteThis = false;           //deconvolute data before any plotting WARNING currently very unstable option
@@ -228,8 +228,8 @@ Int_t firstMacro(){
   const Int_t pointOfPeakRejection = 75;
   const Int_t EVENT = 0;    //run_0090/!\ 11602;  // 14030->60; /!\ 14030 & 14041 & 14048 & 14053(noDipBelow); /!\ 14031 & 14032 & 14052 (1TAC2Peak) 14078 (1TAC3peaks); /!\ 4041 & 14056 (weirdMCP) /!\ 14030 & 14053 & 14059 (singleShort)
   char eRrOr;
-  const Float_t meanBeamPeakHeight = 256.5;     //EDIT value on 04 FEB 2020, prev. used: 253.5;
-  const Float_t meanBeamCharge = 12095.5;       //EDIT value on 04 FEB 2020, prev. used: 11259.5;
+  const Float_t meanBeamPeakHeight = 187.5;     //EDIT on 25 NOV 2020, prev.: 256.5; EDIT on 04 FEB 2020, prev.: 253.5;
+  const Float_t meanBeamCharge = 7959;          //EDIT on 25 NOV 2020, prev.: 12095.5; EDIT on 04 FEB 2020, prev.: 11259.5;
   const Float_t driftV = 20.;                   //mm/us
   const Float_t timeBucketSize = 0.160;         //us
   const Float_t Li7ChargePercentage = 0.2537;   //charge dep by Li7 as percentage Li8 beam charge
@@ -551,7 +551,7 @@ Int_t firstMacro(){
         globalNumberOfEvents++;
         
         tree->GetEntry(i);
-        if (beQuite != 1) cout<<"\nEvent #"<<i<<", num_hits : "<<num_hits<<endl<<endl;
+        if (beQuiet != 1) cout<<"\nEvent #"<<i<<", num_hits : "<<num_hits<<endl<<endl;
         if (num_hits-6 > 100){cout<<"\nWARNING, event "<<i<<"has too many entries.";globalNumberErrors++;globalNumberOfMassiveEvents++;}
         
         //resetting variables/histograms
@@ -618,21 +618,21 @@ Int_t firstMacro(){
         
         //section to see if event has pile-up & attempt clean-up/renorm
         num_hits = num_hits-(auxChanDone+1); //remove the auxillary channels from counting the number of fired pads
-        temp[0] = whichAuxChanIsTAC(timeBucketFormAuxillary[1]);
+        temp[0] = whichAuxChanIsTAC(timeBucketFormAuxillary[1], beQuiet);
         if (temp[0] == 3){ //keeps track of events with problematic TAC or MCP in separate file
             if (trackBizarTACevents == true){ ListTAC<<WhichFile<<"\t"<<i<<endl;}
             temp[0] = 2;
         }
         Int_t pileUpInEvent = pileUp(timeBucketFormAuxillary[(int)temp[0]]);
-        if (beQuite != 1)cout<<"TAC is in aux. chan. "<<temp[0]<<endl;
-        if (beQuite != 1)cout<<"#ofEvents : "<<pileUpInEvent;
-        if (pileUpInEvent == 1){ if (beQuite != 1) cout<<"\t-> Accepted"<<endl;}
-        else {if (beQuite != 1){cout<<"\t-> Rejected"<<endl<<endl;} globalNumberOfPUevents++;}
+        if (beQuiet != 1)cout<<"TAC is in aux. chan. "<<temp[0]<<endl;
+        if (beQuiet != 1)cout<<"#ofEvents : "<<pileUpInEvent;
+        if (pileUpInEvent == 1){ if (beQuiet != 1) cout<<"\t-> Accepted"<<endl;}
+        else {if (beQuiet != 1){cout<<"\t-> Rejected"<<endl<<endl;} globalNumberOfPUevents++;}
         
         if (done == 1 && pileUpInEvent == 1){//if at end of event, and event was clean && no pile-up, perform last check; then add the average to the signal
             preTBF->Add(timeBucketFormAveraged);
             daPeak = locateTACsignal(timeBucketFormAveraged, pileUpInEvent+2); //stores position of peaks found in the averaged TimeBucket-stored output
-            if (beQuite != 1) cout<<"Watch : "<<daPeak[0]<<"\t"<<daPeak[1]<<"\t"<<daPeak[2]<<endl;
+            if (beQuiet != 1) cout<<"Watch : "<<daPeak[0]<<"\t"<<daPeak[1]<<"\t"<<daPeak[2]<<endl;
             for (int j=0;j<pileUpInEvent+2;j++){
                 if (daPeak[j] >=1 && daPeak[j] <= 513){doubleCheckPU++;}
                 else if (daPeak[j] >= 513){daPeakElement++;}//if you're here the real peak you want is not the first, so go fetch next entry, not the first "peak" -> daPeak[daPeakElement] instead of daPeak[0]
@@ -642,11 +642,11 @@ Int_t firstMacro(){
             if (pileUpInEvent == doubleCheckPU){
                 if (acceptPeaksBelowBeam == true){checkCleared = 1;}
                 else if (acceptPeaksBelowBeam == false && daPeak[daPeakElement] > pointOfPeakRejection){checkCleared =1;}
-                else {if (beQuite != 1) {cout<<"\n\tWARNING ! Peak beyond rejection point.\t-> Rejected"<<endl<<endl;} globalNumberErrors++;globalNumberOfLongEvents++;}
+                else {if (beQuiet != 1) {cout<<"\n\tWARNING ! Peak beyond rejection point.\t-> Rejected"<<endl<<endl;} globalNumberErrors++;globalNumberOfLongEvents++;}
             }
-            else if (doubleCheckPU == 0){if (beQuite != 1) {cout<<"\n\tWARNING ! No signal !\t-> Rejected"<<endl<<endl;} globalNumberErrors++;}
+            else if (doubleCheckPU == 0){if (beQuiet != 1) {cout<<"\n\tWARNING ! No signal !\t-> Rejected"<<endl<<endl;} globalNumberErrors++;}
             else{
-                if (beQuite != 1){cout<<"\n\tWARNING ! Multiple peaks for one TAC signal !\t-> Rejected"<<endl<<endl;}
+                if (beQuiet != 1){cout<<"\n\tWARNING ! Multiple peaks for one TAC signal !\t-> Rejected"<<endl<<endl;}
                 globalNumberErrors++;
                 globalNumberOfPUevents++;
             }
@@ -654,22 +654,22 @@ Int_t firstMacro(){
             //Get TAC value
             tacPeak = timeBucketFormAuxillary[(int)temp[0]]->GetMaximumBin();
             TACval = timeBucketFormAuxillary[(int)temp[0]]->GetBinContent(tacPeak) - timeBucketFormAuxillary[(int)temp[0]]->GetBinContent(tacPeak-6); //get peak height, substract baseline
-            if (beQuite != 1) cout<<"TAC position : "<<tacPeak<<"\tTAC value : "<<TACval<<endl;
+            if (beQuiet != 1) cout<<"TAC position : "<<tacPeak<<"\tTAC value : "<<TACval<<endl;
             
             //check number of fired Pads
             if (usePadsGates == true && (num_hits > maxNbrOfPadsFired)){
                 checkCleared = 0;
-                if (beQuite != 1){cout<<"\n\tWARNING ! Too many fired pads : "<<num_hits<<" > "<<maxNbrOfPadsFired<<".\t-> Rejected"<<endl<<endl;}
+                if (beQuiet != 1){cout<<"\n\tWARNING ! Too many fired pads : "<<num_hits<<" > "<<maxNbrOfPadsFired<<".\t-> Rejected"<<endl<<endl;}
             }
             
             if (checkCleared == 1){//actual clean & treatement
                 temp[0]=0;
                 //fit noise before track and substract it.
-                if (beQuite != 1) cout<<"location of peaks : "<<daPeak[daPeakElement]<<endl;
+                if (beQuiet != 1) cout<<"location of peaks : "<<daPeak[daPeakElement]<<endl;
                 TF1 *fa0 = new TF1("fa0", "pol0(0)",5,daPeak[daPeakElement]-20);
                 timeBucketFormAveraged->Fit(fa0,"RQ"); //fit options: no draw, limited range, quiet
                 if (drawLengthVbackgrd) temp[2] = fa0->GetParameter(0);
-                if (beQuite != 1) cout<<"fa0->GetParameter(0) = "<<fa0->GetParameter(0)<<endl;
+                if (beQuiet != 1) cout<<"fa0->GetParameter(0) = "<<fa0->GetParameter(0)<<endl;
                 fa0->SetRange(0,511);
                 if (substractBckgrd){preTBF->Add(fa0,-1,"");}
                 preTBF->SetBinContent(0,0);
@@ -685,7 +685,7 @@ Int_t firstMacro(){
                 preTBF->Fit(fa0,"RQ");
                 if (drawLengthVbackgrd == true && substractBckgrd == true) temp[2] += fa0->GetParameter(0);
                 else if (drawLengthVbackgrd == true && substractBckgrd == false) temp[2] = fa0->GetParameter(0);
-                if (beQuite != 1) cout<<"fa0->GetParameter(0), v2 = "<<fa0->GetParameter(0)<<endl;
+                if (beQuiet != 1) cout<<"fa0->GetParameter(0), v2 = "<<fa0->GetParameter(0)<<endl;
                 for (int j=daPeak[daPeakElement];j<511;j++){
                     if (preTBF->GetBinContent(j) <= max(fa0->GetParameter(0)*1.5,7.)){
 //                         cout<<"\nj : "<<j;
@@ -699,7 +699,7 @@ Int_t firstMacro(){
                 
                 for (int p = howManyInDerivArray-3;p>0;p--){// <- start from end of array
                     if (derivativeAverage[p] < -1.01){ // <- gives start of track
-                        if (beQuite != 1) cout<<"tentative : "<<p<<"\t"<<daPeak[daPeakElement]+(p+1)*5<<endl; //p +1(for stepping) 
+                        if (beQuiet != 1) cout<<"tentative : "<<p<<"\t"<<daPeak[daPeakElement]+(p+1)*5<<endl; //p +1(for stepping) 
                         fa0->SetRange(daPeak[daPeakElement]+(p+1)*5+10,505); // <- select plateau at the end of the time bucket form
                         preTBF->Fit(fa0,"RQ");
 //                         cout<<"fa0->GetParameter(0), v3 = "<<fa0->GetParameter(0)<<endl;
@@ -719,7 +719,7 @@ Int_t firstMacro(){
                                     temp[1] = 1000000.; //break
                                 }
                             }
-                            if (beQuite != 1) cout<<"\nmaxDerivativePosition[0] = "<<maxDerivativePosition[0]<<", maxDerivativePosition[1] = "<<maxDerivativePosition[1]<<endl; //respectively position of start and end of track
+                            if (beQuiet != 1) cout<<"\nmaxDerivativePosition[0] = "<<maxDerivativePosition[0]<<", maxDerivativePosition[1] = "<<maxDerivativePosition[1]<<endl; //respectively position of start and end of track
                             
 //                             cout<<"\n\t\tNotice me Senpai !\n"; 
                             
@@ -771,7 +771,7 @@ Int_t firstMacro(){
                                 draw3DTrack = false;
                             }
                             else if (draw3DTrack == true && num_hits >= 100){
-                                if (!beQuite) cout<<"\nWARNING ! Event incompatible with 'draw3DTrack' option. Dropping option.\n";
+                                if (!beQuiet) cout<<"\nWARNING ! Event incompatible with 'draw3DTrack' option. Dropping option.\n";
                                 draw3DTrack = false; //TODO change to allow for next track to be selected
                             }
                             
@@ -1160,7 +1160,7 @@ Int_t firstMacro(){
         CNbrVQ->SetLogz();
         nbrOfPadsVcharge->Draw("colz");
         if (saveHistograms){
-            fStreamNameS = fStreamName + "nbrOfPads-6Vcharge.root";
+            fStreamNameS = fStreamName + "nbrOfPadsVcharge.root";
             const char *nameCNbrVQ = fStreamNameS.c_str(); //WARNING http://www.cplusplus.com/forum/general/100714/
             CNbrVQ->SaveAs(nameCNbrVQ);
             delete CNbrVQ;
@@ -1172,7 +1172,7 @@ Int_t firstMacro(){
         CNbrVTAC->SetLogz();
         nbrOfPadsVtac->Draw("colz");
         if (saveHistograms){
-            fStreamNameS = fStreamName + "nbrOfPads-6Vtac.root";
+            fStreamNameS = fStreamName + "nbrOfPadsVtac.root";
             const char *nameCNbrVTAC = fStreamNameS.c_str(); //WARNING http://www.cplusplus.com/forum/general/100714/
             CNbrVTAC->SaveAs(nameCNbrVTAC);
             delete CNbrVTAC;
@@ -1184,7 +1184,7 @@ Int_t firstMacro(){
         CNbrVPH->SetLogz();
         nbrOfPadsVpeakHeight->Draw("colz");
         if (saveHistograms){
-            fStreamNameS = fStreamName + "nbrOfPads-6VpeakHeight.root";
+            fStreamNameS = fStreamName + "nbrOfPadsVpeakHeight.root";
             const char *nameCNbrVPH = fStreamNameS.c_str(); //WARNING http://www.cplusplus.com/forum/general/100714/
             CNbrVPH->SaveAs(nameCNbrVPH);
             delete CNbrVPH;
