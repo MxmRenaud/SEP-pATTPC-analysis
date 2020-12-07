@@ -179,8 +179,8 @@ double the_steppar(double* var, double* param){
 //=================================================================================================================================
 
 
-Int_t firstMacro(){
-
+// Int_t firstMacro(){  //if you run as root macro
+Int_t main(){           //if you compile
     
 //END---------WHAT DO Y0U WISH TO DO HERE, MORTAL ? -------------------
     
