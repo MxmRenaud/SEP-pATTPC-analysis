@@ -195,7 +195,7 @@ Int_t firstMacro(){
     bool substractBckgrd = true;
     bool beQuiet = true;                   //reduced terminal output
     bool addSignalCharacOnPlots = true;     //plot expected values for fusion/contaminants on some of the data plots.
-    bool trackBizarTACevents = true;
+    bool trackBizarTACevents = false;       //Create a separate file listing events whose TAC channel behaviour are unexpected (i.e., generate a globalNumberOfTACchannelIDproblems error.
     bool deconvoluteThis = false;           //deconvolute data before any plotting WARNING currently very unstable option
     
     bool drawWhichPadIsIt = false;
@@ -552,7 +552,7 @@ Int_t firstMacro(){
         
         tree->GetEntry(i);
         if (beQuiet != 1) cout<<"\nEvent #"<<i<<", num_hits : "<<num_hits<<endl<<endl;
-        if (num_hits-6 > 100){cout<<"\nWARNING, event "<<i<<"has too many entries.";globalNumberErrors++;globalNumberOfMassiveEvents++;}
+        if (num_hits-6 > 100){cout<<"\nWARNING, event "<<i<<" has too many entries.";globalNumberErrors++;globalNumberOfMassiveEvents++;}
         
         //resetting variables/histograms
         auxChanDone = 0;
@@ -1191,7 +1191,7 @@ Int_t firstMacro(){
         }
   }
     
- cout<<"\n\nEnd of program reached, handled "<<globalNumberOfEvents<<" events.\nEncountered "<<globalNumberErrors<<" non-terminal errors.\nThere were "<<globalNumberOfPUevents<<" rejected pile-up events.\nThere were "<<globalNumberOfLongEvents<<" rejected long events.\nThere were "<<globalNumberOfTACchannelIDproblems<<" events with unexpected TAC channel behaviour.\nThere were "<<globalNumberOfMassiveEvents<<" events with over a 100 fired channels.\n";
+ cout<<"\n\nEnd of program reached, handled "<<globalNumberOfEvents<<" events.\nEncountered "<<globalNumberErrors<<" non-terminal errors ("<<100.*globalNumberErrors/globalNumberOfEvents<<"% of total).\nThere were "<<globalNumberOfPUevents<<" rejected pile-up events ("<<100.*globalNumberOfPUevents/globalNumberOfEvents<<"% of total).\nThere were "<<globalNumberOfLongEvents<<" rejected long events ("<<100.*globalNumberOfLongEvents/globalNumberOfEvents<<"% of total).\nThere were "<<globalNumberOfTACchannelIDproblems<<" events with unexpected TAC channel behaviour ("<<100.*globalNumberOfTACchannelIDproblems/globalNumberOfEvents<<"% of total).\nThere were "<<globalNumberOfMassiveEvents<<" events with over a 100 fired channels ("<<100.*globalNumberOfMassiveEvents/globalNumberOfEvents<<"% of total).\n";
  delete preTBF;
  
  if (saveHistograms){
