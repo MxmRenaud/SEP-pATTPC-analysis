@@ -1,0 +1,10 @@
+Run 39
+Runs [8;15[
+Runs [21;35] X
+Runs [37;44[+[47;49] X
+Runs [50;53] X
+(differs 0.1 torr with previous) Runs [62;63]
+Runs [64;65[
+Runs ]65;110] X
+Runs [113;114[ TO REJECT, 113 changed TSCA threshold during
+Runs [115;125] X

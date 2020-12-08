@@ -13,7 +13,8 @@
 * ================================================================
 * 
 * TODO look into remanence for plotted histograms so you can delete your objects
-* NOTE: because I'm an uncivilised Barbarian, this is supposed to be invoked as a root macro, not a compiled program. 
+* NOTE: because I'm an uncivilised Barbarian, this is supposed to be invoked as a root macro and run/compiled as such, not a regular compiled program. 
+* I.e.: either 'root -b firstMacro.C' or 'root -b -L firstMacro.C++'
 * 
 * 
 * NOTE HOWTO:at the beginning of the firstMacro(), a few self-explanatory boolians
@@ -51,7 +52,7 @@
 #include <cstring>
 #include <TClass.h>
 
-// #include "convolutionTA/convolution.c"
+// #include "convolutionTA/convolution.c"  //NOTE: needs to be commented when not compiling
 
 
 using namespace std;
@@ -64,14 +65,6 @@ Int_t globalNumberOfTACchannelIDproblems;
 Int_t globalNumberOfMassiveEvents;
 
 Int_t whichAuxChanIsTAC(TH1I* histo, bool quiet){ //is the TAC in the auxillary channel 1 or 2 ?
-    //this block is not valid, some MCP signals have very low plateaus and similar averages
-//     bool boo = false;
-//     TF1 *fa0 = new TF1("fa0", "pol0(0)",0,511);
-//     histo->Fit(fa0,"0");
-//     if (fa0->GetParameter(0) > 2000){boo = true;}
-//     delete fa0;
-//     if (boo == true) return 2;
-//     else return 1;
     //locate the max and it's position: if in the back and over 3000, then it's MCP not TAC
     bool boo = false;
     Int_t maxReached=0;
@@ -96,15 +89,13 @@ Int_t whichAuxChanIsTAC(TH1I* histo, bool quiet){ //is the TAC in the auxillary 
 //estimate pile-up by counting the number of TAC signals
 Int_t pileUp(TH1I* histo){ 
     TF1 *fa0 = new TF1("fa0", "pol0(0)",0,511);
-    histo->Fit(fa0,"0Q"); //0: not drawing, Q: quiet
+    histo->Fit(fa0,"0Q"); //options -> 0: not drawing, Q: quiet
     Float_t barem = fa0->GetParameter(0)*1.33;
-//     cout<<"TAC test-value : "<<barem<<endl;
     delete fa0;
     Int_t nbrOfEvent = 0;
     for (int i=0; i<511;i++){
        if (histo->GetBinContent(i) <= barem && histo->GetBinContent(i+1) > barem){nbrOfEvent++;}
     }
-//     cout<<nbrOfEvent<<endl;
     return nbrOfEvent;
 }
 
@@ -122,7 +113,7 @@ Double_t* locateTACsignal(TH1F* histo_input, Int_t howMany){
     Double_t* XPics = s->GetPositionX();
     Double_t v;
     Int_t i,j;
-    //--Sorting by Decreasing order
+    //Sorting by Decreasing order
     for (i=0;i<howMany;i++){ 
         for (j=i+1;j<howMany;j++){
             if (XPics[i]<XPics[j]){
@@ -140,7 +131,6 @@ Double_t* locateTACsignal(TH1F* histo_input, Int_t howMany){
 Float_t findDerivative(TH1F* histo_input, Double_t startingPoint, Int_t numberOfBins){
     if (numberOfBins > 0 && numberOfBins < 511/*histo_input->GetMaximumStored()*/){
         Float_t deri;
-//         histo_input->GetXaxis()->SetRangeUser((int)startingPoint,(int)startingPoint+numberOfBins);
         TF1 *fa1 = new TF1("fa1", "pol1(0)",(int)startingPoint,(int)startingPoint+numberOfBins);
         histo_input->Fit(fa1,"QR");
         deri = fa1->GetParameter(1);
@@ -166,37 +156,29 @@ float AveragE(Float_t a[], int n, int start){
     }
 } 
 
-//functions for TF1's
-double the_gausppar(double* var, double* param){
-  return param[0]*TMath::Gaus(var[0],param[1],param[2]);
-}
-double the_steppar(double* var, double* param){
-    return param[0]*((var[0]<param[1])?1:0);
-}
 
 
 
 //=================================================================================================================================
 
 
-// Int_t firstMacro(){  //if you run as root macro
-Int_t main(){           //if you compile
+Int_t firstMacro(){  
     
 //END---------WHAT DO Y0U WISH TO DO HERE, MORTAL ? -------------------
     
     bool runOnTheCRC = true;               //deactivates mandatory user input & adapt file paths NOTE not optimal for the latter part.
-    bool multiRunAnalysis = true;           //select between two lists of files (here 'list-preAnal.txt' and 'list-analysis.txt') for convenience in switching between debugging/actual run
+    bool multiRunAnalysis = true;           //select between two lists of files (here 'list-preAnal.txt' and 'list-analysis.txt') for convenience in switching between debugging/actual analysis run NOTE: files can be commented in the list by putting an asterisk (*) in front
     
-    bool fillIndividualChannels = false;
-    bool realignTracks = true;              //BEST TRACK LENGTH FINDING ALGORYTHM IS LOCKED IN HERE, as well
-    bool acceptPeaksBelowBeam = false;      // do you want to keep events that peak much further than the primary beam ? see 'pointOfPeakRejection' Will exclude most events that are just noise and some disintegration events.
+    bool fillIndividualChannels = false;    //if you want to look at a single event, channel by channel
+    bool realignTracks = true;              //NOTE: BEST TRACK LENGTH FINDING ALGORYTHM IS LOCKED IN HERE; draws sum of all channels, summed for every event
+    bool acceptPeaksBelowBeam = false;      // do you want to keep events that peak much further than the primary beam ? see 'pointOfPeakRejection'. Will exclude most events that are just noise and some disintegration events.
     bool useFusionGates = false;            //attempt to only keep events fulfilling certain conditions [hard-coded atm] TODO change that
-    bool usePadsGates = true;              //only keep events with less than "maxNbrOfPadsFired" pads fired (WARNING not including 6 auxillary channels !)
+    bool usePadsGates = true;              //only keep events with less than "maxNbrOfPadsFired" pads fired (NOTE not including 6 auxillary channels !)
     bool substractBckgrd = true;
     bool beQuiet = true;                   //reduced terminal output
     bool addSignalCharacOnPlots = true;     //plot expected values for fusion/contaminants on some of the data plots.
-    bool trackBizarTACevents = false;       //Create a separate file listing events whose TAC channel behaviour are unexpected (i.e., generate a globalNumberOfTACchannelIDproblems error.
-    bool deconvoluteThis = false;           //deconvolute data before any plotting WARNING currently very unstable option
+    bool trackBizarTACevents = false;       //Create a separate file listing events whose TAC channel behaviour are unexpected (i.e., generate a globalNumberOfTACchannelIDproblems error)
+    bool deconvoluteThis = false;           //deconvolute data before any plotting WARNING currently not working
     
     bool drawWhichPadIsIt = false;
     bool drawIndividualChannels = false;
@@ -236,12 +218,12 @@ Int_t main(){           //if you compile
   const Float_t Li7peakHeight = 0.9998;         //bragg peak height of Li7 as percentage Li8 bragg peak height
   const Float_t Li7avTrLenght = 57.5;           //Li7 bragg peak position in Time Buckets
   const int lengthOfConvolArray = 256;          //length of the (de)convolution array
-  const Int_t maxNbrOfPadsFired = 8;           //user-defined limit to keep only events with straight tracks (no scattering, diffusion, decay, etc)
+  const Int_t maxNbrOfPadsFired = 8;            //user-defined limit to keep only events with straight tracks (no scattering, diffusion, decay, etc)
 
 
   
   //--ERRORS AND WARNINGS--------------------------------------------------
-  if (fillIndividualChannels == false && drawIndividualChannels == true){cout<<"\n~~~~~~~~~~~~~~~~~~~~~WARNING !~~~~~~~~~~~~~~~~~~~\n\nY'need to read the channels to draw them, asshat.\nGo activate 'fillIndividualChannels' and try again.\n\n\tCan you manage to get THAT right, at least ?\n\n";return 0;}
+  if (fillIndividualChannels == false && drawIndividualChannels == true){cout<<"\n~~~~~~~~~~~~~~~~~~~~~WARNING !~~~~~~~~~~~~~~~~~~~\n\nYou need to read the channels to draw them.\nGo activate 'fillIndividualChannels' and try again.\n\n";return 0;}
   if (realignTracks == true && drawTBFeventRemanent == true && runOnTheCRC == false){
       cout<<"\nWARNING ! You asked for both the tracks to be re-aligned before drawing (realignTracks) AND for the tracks to be drawn without being re-aligned (drawTBFeventRemanent).\nDo you wish to proceed ? (y/n) : ";
       cin>>eRrOr;
@@ -250,7 +232,7 @@ Int_t main(){           //if you compile
       else {cout<<"\n... you think you're being funny ?\n\n\n\tYou. Aren't.\n\n";return 0;}
   }
   if (useFusionGates == true && (drawLengthVpeakHeight == false || drawLengthVtrackCharge == false || realignTracks == false)){
-      cout<<"\nWARNING\nFor now  please activate drawLengthVtrackCharge, drawLengthVpeakHeight & realignTracks to run useFusionGates. 'may patch that later.\n\n";
+      cout<<"\nWARNING\nFor now  please activate drawLengthVtrackCharge, drawLengthVpeakHeight & realignTracks to run useFusionGates.\n\n";
       return 0;
   }
   if (drawChargeVtac == true && drawLengthVtrackCharge == false){
@@ -258,7 +240,7 @@ Int_t main(){           //if you compile
       return 0;
   }
   if (drawPeakHeightVtac == true && drawLengthVpeakHeight == false){
-      cout<<"\nWARNING ! Asking for 'drawPeakHeightVtac == true && drawLengthVpeakHeight == false' ain't no good. Sorry.\n";
+      cout<<"\nWARNING ! Asking for 'drawPeakHeightVtac == true && drawLengthVpeakHeight == false' is not a supported combo.\nPlease correct.\n\nThank you kindly.\n";
       return 0;
   }
   if ((draw3DTrack == true || drawDoubleProjectTrack == true) && realignTracks == false){
@@ -284,7 +266,7 @@ Int_t main(){           //if you compile
   if(mapStream.is_open()){//structure Cobo<< "\t" << Asad<< "\t" << Aget<< "\t" << Channel<< "\t" << PadNum << "\t" << xPos(mm) << "\t" << yPos(mm)
       while(mapStream>>mapp[line][0]>>mapp[line][1]>>mapp[line][2]>>mapp[line][3]>>mapp[line][4]>>mapp[line][5]>>mapp[line][6]){
           if (line == numberOfPads){
-          cout<<"\n\nWARNING !\nMore lines in the 'mapStream' than space in the 'mapp' matrix, there are.\nFucked up, you have.\nFix it, you should.\n";
+          cout<<"\n\nWARNING !\nThere are more lines in the 'mapStream' than space in the 'mapp' matrix.\nThis should be fixed.\n";
           return 0;
           }
           line++;
@@ -307,7 +289,7 @@ Int_t main(){           //if you compile
   if ((useFusionGates == true || addSignalCharacOnPlots == true) && characStream.is_open()){//energy[kev], charge[% of BeamE], peakHeight[fraction of beam peak], dist travelled [estim., mm]
       while (characStream>>fusionCharac[line][0]>>fusionCharac[line][1]>>fusionCharac[line][2]>>fusionCharac[line][3]){
           if (line == numberOfEnergies){
-              cout<<"\n\nWARNING !\nMore lines in the 'characStream' than space in the 'fusionCharac' matrix, there are.\nFucked up, you have.\nFix it, you should.\n";
+              cout<<"\n\nWARNING !\nThere are more lines in the 'characStream' than space in the 'fusionCharac' matrix.\nThis should be fixed.\n";
               return 0;
           }
           line++;
@@ -494,7 +476,7 @@ Int_t main(){           //if you compile
   grA->Draw("same");
   
   return 0;*/
-  
+  //--END DEFINITION OF (DE)CONVOLUTION USTENSILS---------------------------------
   
   
   
@@ -512,7 +494,7 @@ Int_t main(){           //if you compile
   bool done = 0;
   Int_t auxChanDone = 0;
   bool checkCleared = 0;                //WARNING when 'no PileUp' condition gets relaxed, this check will be a problem
-  Int_t doubleCheckPU = 0;              //stores calculated pile-up value for double checking event
+  Int_t doubleCheckPU = 0;              //stores calculated pile-up value for double checking event validity
   Double_t* daPeak;
   Int_t tacPeak;
   Double_t TACval = 0;
@@ -520,7 +502,7 @@ Int_t main(){           //if you compile
   Float_t storedDerivative[100], derivativeAverage[100];
   Int_t howManyInDerivArray = 0;
   Float_t maxDerivativePosition[2];
-  Float_t temp[3]; //variables for random use
+  Float_t temp[3];                      //variables for random use
   bool fusionTestValidated = 0;
   Float_t padsPosition[100][512][2];
   int checkTrack3D;
@@ -543,7 +525,7 @@ Int_t main(){           //if you compile
     tree->SetBranchAddress("br_len", &num_hits);
     tree->SetBranchAddress("myints", data);
     
-    //IMPORTANT! structure: Cobo<< "\t" << Asad<< "\t" << Aget<< "\t" << Channel<< "\t" << PadNum
+    //NOTE IMPORTANT! structure: Cobo<< "\t" << Asad<< "\t" << Aget<< "\t" << Channel<< "\t" << PadNum
     
     //Recursively go through tree, getting "Fill" after "Fill"
     for (Int_t i=EVENT; i</*EVENT+10000*/tree->GetEntries(); i++){
@@ -583,7 +565,6 @@ Int_t main(){           //if you compile
             done = 0;
             
             for (Int_t k=0; k<517; k++){
-                /*temp cout data    if (k%100==0){cout<<"\nnum_hits : "<<num_hits<<", data["<<j<<"]["<<k<<"] = "<<data[j][k];}*/
                 
                 if (done==0 && k == 4){//ID what the channel is 
                     if (data[j][0] < 2){
@@ -598,7 +579,6 @@ Int_t main(){           //if you compile
                     else {cout<<"\n*Posh british accent* I say, this is rather unexpected indeed old chap'...\n\tEntry num. : "<<i<<", j : "<<j<<", k : "<<k<<endl<<endl;return 0;}
                     whichChannel->SetBinContent(j,whatChan);
                     done=1;
-//                     cout<<"\n\twhichChannel here is : "<<data[j][k];
                 }// \end ID what the channel is
                 if (done==1 && k>4 && data[j][0] != 2){//fill in time bucket format for non-auxillary channels
                     if (fillIndividualChannels == true && j<100){timeBucketForm[j]->SetBinContent(k-5,data[j][k]);}
@@ -676,7 +656,6 @@ Int_t main(){           //if you compile
                 
                 //locate start of track and substract after track noise
                 for (int bin=0;bin<(511.-daPeak[daPeakElement])/5.;bin++){//use the derivative of the track signal to help ID the end (sharp drop)
-//                     cout<<daPeak[daPeakElement]+bin*5<<"\t"<<findDerivative(preTBF,daPeak[daPeakElement]+bin*5,derivativeCalcWindowSize)<<endl;
                     storedDerivative[bin] = findDerivative(preTBF,daPeak[daPeakElement]+bin*5,derivativeCalcWindowSize);
                     whatsTheDerivative->SetBinContent(daPeak[daPeakElement]+bin*5,storedDerivative[bin]);
                     howManyInDerivArray++;
@@ -688,9 +667,7 @@ Int_t main(){           //if you compile
                 if (beQuiet != 1) cout<<"fa0->GetParameter(0), v2 = "<<fa0->GetParameter(0)<<endl;
                 for (int j=daPeak[daPeakElement];j<511;j++){
                     if (preTBF->GetBinContent(j) <= max(fa0->GetParameter(0)*1.5,7.)){
-//                         cout<<"\nj : "<<j;
                         for (int u=0; u<howManyInDerivArray-3; u++){
-//                             cout<<u<<"\t"<<storedDerivative[u]<<"\t"<<AveragE(storedDerivative,3,3+u)<<endl; 
                             derivativeAverage[u]=AveragE(storedDerivative,3,3+u); //TODO optimise this section ! too many loops !
                         }
                         break;
@@ -702,7 +679,6 @@ Int_t main(){           //if you compile
                         if (beQuiet != 1) cout<<"tentative : "<<p<<"\t"<<daPeak[daPeakElement]+(p+1)*5<<endl; //p +1(for stepping) 
                         fa0->SetRange(daPeak[daPeakElement]+(p+1)*5+10,505); // <- select plateau at the end of the time bucket form
                         preTBF->Fit(fa0,"RQ");
-//                         cout<<"fa0->GetParameter(0), v3 = "<<fa0->GetParameter(0)<<endl;
                         fa0->SetRange(0,511);
                         if (substractBckgrd){preTBF->Add(fa0,-1.01,"");}
                         
@@ -721,7 +697,6 @@ Int_t main(){           //if you compile
                             }
                             if (beQuiet != 1) cout<<"\nmaxDerivativePosition[0] = "<<maxDerivativePosition[0]<<", maxDerivativePosition[1] = "<<maxDerivativePosition[1]<<endl; //respectively position of start and end of track
                             
-//                             cout<<"\n\t\tNotice me Senpai !\n"; 
                             
                             if (drawLengthVbackgrd) lengthVbackground->Fill(maxDerivativePosition[0]+estimatedWidth-maxDerivativePosition[1],temp[2]); //temp[2] holds the background/baseline
                             
@@ -848,7 +823,7 @@ Int_t main(){           //if you compile
         
     } // END of loop through events
    } // END if("file.is_open()")
-   else {cout << "\n\nWARNING ! FAILED TO OPEN FILE "<<WhichFile<<", ABORTING.\nNow go and find out where you messed up. You prick.\n\n";break;return 0;}
+   else {cout << "\n\nWARNING ! FAILED TO OPEN FILE "<<WhichFile<<", ABORTING.\nYou should go find out what happened.\n\n";break;return 0;}
    
    
    file->Close();
@@ -861,24 +836,6 @@ Int_t main(){           //if you compile
   List.close();
   ListTAC.close();
   
-  //Def of projections
-  
-
-  
-  
-  //Def fit fonction
-/*  //Step-function convolution
-  Float_t ampli = 50.;
-  Float_t posi = 500.;
-  TF1 *steppy = new TF1("steppy",the_steppar,0,512,2);
-  steppy->SetParameter(0,ampli);
-  steppy->SetParameter(1,posi);
-  TF1 *detResp = new TF1("detResp",the_gausppar,0,512,3);
-  detResp->SetParameter(2,1./timeBucketSize);
-  TF1Convolution *step_conv = new TF1Convolution(steppy,detResp,485,512,true); 
-  TF1* f_conv = new TF1("f_conv",*step_conv,485,512,step_conv->GetNpar());
-  // END step-function*/
-  
   
   
   
@@ -886,7 +843,7 @@ Int_t main(){           //if you compile
 
   //Defining style of graph
   gStyle->SetOptTitle(0);
-  gStyle->SetOptStat(1111111);//now showing integral under-and-overflow ! //old: 1001110
+  gStyle->SetOptStat(1111111);//now showing integral under-and-overflow !
   gStyle->SetOptFit(1);
   gStyle->ToggleEventStatus();
   
@@ -1219,4 +1176,4 @@ Int_t main(){           //if you compile
   
 }
 
-// /afs/crc.nd.edu/user/m/mrenaud1/Public/stockageGraphAnal/    /home/mrenaud1/Documents/Li8Analysis/requestedGraphs/
+// /afs/crc.nd.edu/user/m/mrenaud1/Public/stockageGraphAnal/  

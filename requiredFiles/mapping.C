@@ -51,7 +51,7 @@ int main(){
 				}
 			}
 			else if (spaceMap.is_open() == false){cout <<"\nWe're closed. Come back later.\n"; return 0;}
-			else {cout << "\nEr is een probleempje met PadNum, vriend.\nJammer, heh ?\n";return 0;}
+			else {cout << "\nEr is een probleempje met PadNum, vriend.\t(There is a small problem with PadNum, friend.)\nJammer, heh ?\t(Too bad, right ?)\n";return 0;}
 			outputMap << Cobo<< "\t" << Asad<< "\t" << Aget<< "\t" << Channel<< "\t" << PadNum<< "\t" << posX<< "\t" << posY <<endl;
 		}
 	}
