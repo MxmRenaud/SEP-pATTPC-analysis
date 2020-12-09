@@ -1149,7 +1149,7 @@ Int_t firstMacro(){
   }
     
  cout<<"\n\nEnd of program reached, handled "<<globalNumberOfEvents<<" events.\nEncountered "<<globalNumberErrors<<" non-terminal errors ("<<100.*globalNumberErrors/globalNumberOfEvents<<"% of total).\nThere were "<<globalNumberOfPUevents<<" rejected pile-up events ("<<100.*globalNumberOfPUevents/globalNumberOfEvents<<"% of total).\nThere were "<<globalNumberOfLongEvents<<" rejected long events ("<<100.*globalNumberOfLongEvents/globalNumberOfEvents<<"% of total).\nThere were "<<globalNumberOfTACchannelIDproblems<<" events with unexpected TAC channel behaviour ("<<100.*globalNumberOfTACchannelIDproblems/globalNumberOfEvents<<"% of total).\nThere were "<<globalNumberOfMassiveEvents<<" events with over a 100 fired channels ("<<100.*globalNumberOfMassiveEvents/globalNumberOfEvents<<"% of total).\n";
- delete preTBF;
+ 
  
  if (saveHistograms){
      //TODO do you need the 'if's here ? shouldn't every object get deleted regardless ?
@@ -1170,6 +1170,7 @@ Int_t firstMacro(){
      if (drawNbrOfPadsVcharge){delete nbrOfPadsVcharge;}
      if (drawNbrOfPadsVpeakHeight){delete nbrOfPadsVpeakHeight;}
      if (drawNbrOfPadsVtac){delete nbrOfPadsVtac;}
+     delete preTBF;
      gApplication->Terminate();
  }
  return 0;
