@@ -13,7 +13,8 @@
 * ================================================================
 * 
 * TODO look into remanence for plotted histograms so you can delete your objects
-* NOTE: because I'm an uncivilised Barbarian, this is supposed to be invoked or compiled as a root macro (either 'root <fileName>' or 'root -L <fileName>++'), not a compiled program. 
+* NOTE: because I'm an uncivilised Barbarian, this is supposed to be invoked as a root macro and run/compiled as such, not a regular compiled program. 
+* I.e.: either 'root -b firstMacro.C' or 'root -b -L firstMacro.C++'
 * 
 * 
 * NOTE HOWTO:at the beginning of the firstMacro(), a few self-explanatory boolians
@@ -21,7 +22,6 @@
 */
 
 #include <stdlib.h>
-#include <stdio.h>
 #include "TGraphErrors.h"
 #include "TCanvas.h"
 #include "TTree.h"
@@ -30,7 +30,6 @@
 #include "TH2F.h"
 #include "TH3F.h"
 #include "TFile.h"
-#include "TSpectrum.h"
 #include "TF1.h"
 #include "TMarker.h"
 #include "TMath.h"
@@ -53,25 +52,20 @@
 #include <cstring>
 #include <TClass.h>
 
-// #include "fourier-fcts.c"
+// #include "convolutionTA/convolution.c"  //NOTE: needs to be commented when not compiling
 
 
 using namespace std;
 
+Int_t globalNumberOfEvents;
 Int_t globalNumberErrors;
 Int_t globalNumberOfPUevents;
 Int_t globalNumberOfLongEvents;
+Int_t globalNumberOfTACchannelIDproblems;
+Int_t globalNumberOfMassiveEvents;
 
-Int_t whichAuxChanIsTAC(TH1I* histo){ //is the TAC in the auxillary channel 1 or 2 ?
-    //not valid, some MCP signals have very low plateaus and the similar averages
-//     bool boo = false;
-//     TF1 *fa0 = new TF1("fa0", "pol0(0)",0,511);
-//     histo->Fit(fa0,"0");
-//     if (fa0->GetParameter(0) > 2000){boo = true;}
-//     delete fa0;
-//     if (boo == true) return 2;
-//     else return 1;
-    //locate the max aqnd it's position: if in the back and over 3000, then it's MCP not TAC
+Int_t whichAuxChanIsTAC(TH1I* histo, bool quiet){ //is the TAC in the auxillary channel 1 or 2 ?
+    //locate the max and it's position: if in the back and over 3000, then it's MCP not TAC
     bool boo = false;
     Int_t maxReached=0;
     Int_t savePosition;
@@ -83,30 +77,31 @@ Int_t whichAuxChanIsTAC(TH1I* histo){ //is the TAC in the auxillary channel 1 or
     }
     if (maxReached >= 3000 && savePosition > 480){return 2;}
     else if ((maxReached < 3000 && savePosition > 480) || (maxReached >= 3000 && savePosition < 480)){
-        cout<<"\n\n================ WARNING ! ================\nRevise your TAC-or-MCP conditions !\n================ WARNING ! ================\n\n";
+        if (quiet == false) {cout<<"\n\n================ WARNING ! ================\nRevise your TAC-or-MCP conditions !\n================ WARNING ! ================\n\n";}
         globalNumberErrors++;
-        return 2;
+        globalNumberOfTACchannelIDproblems++;
+        return 3;
     }
     else {return 1;}
 }
 
 
-Int_t pileUp(TH1I* histo){
+//estimate pile-up by counting the number of TAC signals
+Int_t pileUp(TH1I* histo){ 
     TF1 *fa0 = new TF1("fa0", "pol0(0)",0,511);
-    histo->Fit(fa0,"0Q");
+    histo->Fit(fa0,"0Q"); //options -> 0: not drawing, Q: quiet
     Float_t barem = fa0->GetParameter(0)*1.33;
-//     cout<<"TAC test-value : "<<barem<<endl;
     delete fa0;
     Int_t nbrOfEvent = 0;
     for (int i=0; i<511;i++){
        if (histo->GetBinContent(i) <= barem && histo->GetBinContent(i+1) > barem){nbrOfEvent++;}
     }
-//     cout<<nbrOfEvent<<endl;
     return nbrOfEvent;
 }
 
 
-Double_t* locateTACsignal(TH1F* histo_input, Int_t howMany){
+//locate peaks' positions in data to prepare ID-ing the one(s) that are signal
+Double_t* locateTACsignal(TH1F* histo_input, Int_t howMany){ 
     Float_t rAtiO = 0.4;
     Float_t wIdTh = 3;
     Int_t rangeMin = 2;
@@ -118,7 +113,7 @@ Double_t* locateTACsignal(TH1F* histo_input, Int_t howMany){
     Double_t* XPics = s->GetPositionX();
     Double_t v;
     Int_t i,j;
-    //--Sorting by Decreasing order
+    //Sorting by Decreasing order
     for (i=0;i<howMany;i++){ 
         for (j=i+1;j<howMany;j++){
             if (XPics[i]<XPics[j]){
@@ -130,12 +125,12 @@ Double_t* locateTACsignal(TH1F* histo_input, Int_t howMany){
     }
     return XPics;
 }
-   
 
+   
+//gives a rough estimate of the derivative at ((startingPoint+numberOfBins)-startingPoint)/2
 Float_t findDerivative(TH1F* histo_input, Double_t startingPoint, Int_t numberOfBins){
     if (numberOfBins > 0 && numberOfBins < 511/*histo_input->GetMaximumStored()*/){
         Float_t deri;
-//         histo_input->GetXaxis()->SetRangeUser((int)startingPoint,(int)startingPoint+numberOfBins);
         TF1 *fa1 = new TF1("fa1", "pol1(0)",(int)startingPoint,(int)startingPoint+numberOfBins);
         histo_input->Fit(fa1,"QR");
         deri = fa1->GetParameter(1);
@@ -161,43 +156,35 @@ float AveragE(Float_t a[], int n, int start){
     }
 } 
 
-//functions for TF1's
-double the_gausppar(double* var, double* param){
-  return param[0]*TMath::Gaus(var[0],param[1],param[2]);
-}
-double the_steppar(double* var, double* param){
-    return param[0]*((var[0]<param[1])?1:0);
-}
 
 
 
 //=================================================================================================================================
 
-
-Int_t firstMacro(){
-
-
+Int_t firstMacro(){  
     
 //END---------WHAT DO Y0U WISH TO DO HERE, MORTAL ? -------------------
     
-    bool runOnTheCRC = true; //deactivates mandatory user input & adapt file paths NOTE not optimal for the latter part.
-    bool multiRunAnalysis = true; //select between two file, 'list-preAnal.txt' and 'list-analysis.txt', for convenience in swtching between debugging/actual run
+    bool runOnTheCRC = true;               //deactivates mandatory user input & adapt file paths NOTE not optimal for the latter part.
+    bool multiRunAnalysis = true;           //select between two lists of files (here 'list-preAnal.txt' and 'list-analysis.txt') for convenience in switching between debugging/actual analysis run NOTE: files can be commented in the list by putting an asterisk (*) in front
     
-    bool fillIndividualChannels = false;
-    bool realignTracks = true; //BEST TRACK LENGTH FINDING ALGORYTHM IS LOCKED IN HERE, as well
-    bool acceptPeaksBelowBeam = false; // do you want to keep events that peak much further than the primary beam ? see 'pointOfPeakRejection' Will exclude most events that are just noise and some disintegration events.
-    bool useFusionGates = false; //attempt to only keep events fulfilling certain conditions [hard-coded atm]
+    bool fillIndividualChannels = false;    //if you want to look at a single event, channel by channel
+    bool realignTracks = true;              //NOTE: BEST TRACK LENGTH FINDING ALGORYTHM IS LOCKED IN HERE; draws sum of all channels, summed for every event
+    bool acceptPeaksBelowBeam = false;      // do you want to keep events that peak much further than the primary beam ? see 'pointOfPeakRejection'. Will exclude most events that are just noise and some disintegration events.
+    bool useFusionGates = false;            //attempt to only keep events fulfilling certain conditions [hard-coded atm] TODO change that
+    bool usePadsGates = true;              //only keep events with less than "maxNbrOfPadsFired" pads fired (NOTE not including 6 auxillary channels !)
     bool substractBckgrd = true;
-    bool beQuite = true; //reduced terminal output
-    bool addSignalCharacOnPlots = true;
-    bool deconvoluteThis = false;
+    bool beQuiet = true;                   //reduced terminal output
+    bool addSignalCharacOnPlots = true;     //plot expected values for fusion/contaminants on some of the data plots.
+    bool trackBizarTACevents = false;       //Create a separate file listing events whose TAC channel behaviour are unexpected (i.e., generate a globalNumberOfTACchannelIDproblems error)
+    bool deconvoluteThis = false;           //deconvolute data before any plotting WARNING currently not working
     
     bool drawWhichPadIsIt = false;
     bool drawIndividualChannels = false;
-    bool drawSummedChannels = false; //sums all channels of a single event into a track and draw.
+    bool drawSummedChannels = false;        //sums all channels of a single event into a track and draw.
     bool drawAuxillaryChannels = false;
-    bool drawTBFeventRemanent = false; //drawTimeBucketFormatEventRemanent = draw a summed profile of all tracks for all events
-    bool drawDerivatives = false; //only one event at a time
+    bool drawTBFeventRemanent = false;       //drawTimeBucketFormatEventRemanent = draw a summed profile of all tracks for all events
+    bool drawDerivatives = false;           //NOTE : Hard-coded for only one event at a time
     bool drawLengthVpeakHeight = true;
     bool drawLengthVtrackCharge = true;
     bool drawLengthVbackgrd = true;
@@ -205,33 +192,37 @@ Int_t firstMacro(){
     bool drawChargeVtac = true;
     bool drawPeakHeightVtac = true;
     bool drawChargeVpeakHeight = true;
-    bool draw3DTrack = false; //WARNING please only one event at a time
-    bool drawDoubleProjectTrack = true; //TODO. TODO. TODO TODO TODO TODOOOOOOOOOOOOOOOOOOOOOO !
+    bool draw3DTrack = false;               //NOTE : Hard-coded for only one event at a time
+    bool drawDoubleProjectTrack = false; 
     bool drawNbrOfPadsVcharge = true; 
     bool drawNbrOfPadsVpeakHeight = true;
     bool drawNbrOfPadsVtac = true;
     
-    bool saveHistograms = true;
+    bool saveHistograms = true;            //NOTE WARNING: currently required to properly free up the memory used. Only falsefy when debugging
     
 //END---THE CONTRACT HAS BEEN SEALED, MORTAL. I SHALL NOW PROCEED...-----
     
     
     
   const Int_t derivativeCalcWindowSize = 5;
-  const Int_t estimatedWidth = 9.; //estimated width of the track's beginning rising edge at high TimeBicket
+  const Int_t estimatedWidth = 9.;              //estimated width of the track's beginning rising edge at high TimeBucket
   const Int_t pointOfPeakRejection = 75;
-  const Int_t EVENT = 0;//run_0090/!\ 11602;  // 14030->60; /!\ 14030 & 14041 & 14048 & 14053(noDipBelow); /!\ 14031 & 14032 & 14052 (1TAC2Peak) 14078 (1TAC3peaks); /!\ 4041 & 14056 (weirdMCP) /!\ 14030 & 14053 & 14059 (singleShort)
+  const Int_t EVENT = 0;    //run_0090/!\ 11602;  // 14030->60; /!\ 14030 & 14041 & 14048 & 14053(noDipBelow); /!\ 14031 & 14032 & 14052 (1TAC2Peak) 14078 (1TAC3peaks); /!\ 4041 & 14056 (weirdMCP) /!\ 14030 & 14053 & 14059 (singleShort)
   char eRrOr;
-  const Float_t meanBeamPeakHeight = 256.5;//EDIT value on 02/04, prev.: 253.5;
-  const Float_t meanBeamCharge = 12095.5;//EDIT value on 02/04, prev.: 11259.5;
-  const Float_t driftV = 20.; //mm/us
-  const Float_t timeBucketSize = 0.160; //us
-  const Float_t Li7ChargePercentage = 0.2537; //charge dep by Li7 as percentage Li8 beam charge
-  const Float_t Li7peakHeight = 0.9998; //bragg peak height of Li7 as percentage Li8 bragg peak height
-  const Float_t Li7avTrLenght = 57.5; //Li7 bragg peak position in Time Buckets
+  const Float_t meanBeamPeakHeight = 187.5;     //EDIT on 25 NOV 2020, prev.: 256.5; EDIT on 04 FEB 2020, prev.: 253.5;
+  const Float_t meanBeamCharge = 7959;          //EDIT on 25 NOV 2020, prev.: 12095.5; EDIT on 04 FEB 2020, prev.: 11259.5;
+  const Float_t driftV = 20.;                   //mm/us
+  const Float_t timeBucketSize = 0.160;         //us
+  const Float_t Li7ChargePercentage = 0.2537;   //charge dep by Li7 as percentage Li8 beam charge
+  const Float_t Li7peakHeight = 0.9998;         //bragg peak height of Li7 as percentage Li8 bragg peak height
+  const Float_t Li7avTrLenght = 57.5;           //Li7 bragg peak position in Time Buckets
+  const int lengthOfConvolArray = 256;          //length of the (de)convolution array
+  const Int_t maxNbrOfPadsFired = 8;            //user-defined limit to keep only events with straight tracks (no scattering, diffusion, decay, etc)
 
 
-  if (fillIndividualChannels == false && drawIndividualChannels == true){cout<<"\n~~~~~~~~~~~~~~~~~~~~~WARNING !~~~~~~~~~~~~~~~~~~~\n\nY'need to fill the channels to draw them, asshat.\nGo activate 'fillIndividualChannels' and try again.\n\n\tCan you manage to get THAT right, at least ?\n\n";return 0;}
+  
+  //--ERRORS AND WARNINGS--------------------------------------------------
+  if (fillIndividualChannels == false && drawIndividualChannels == true){cout<<"\n~~~~~~~~~~~~~~~~~~~~~WARNING !~~~~~~~~~~~~~~~~~~~\n\nYou need to read the channels to draw them.\nGo activate 'fillIndividualChannels' and try again.\n\n";return 0;}
   if (realignTracks == true && drawTBFeventRemanent == true && runOnTheCRC == false){
       cout<<"\nWARNING ! You asked for both the tracks to be re-aligned before drawing (realignTracks) AND for the tracks to be drawn without being re-aligned (drawTBFeventRemanent).\nDo you wish to proceed ? (y/n) : ";
       cin>>eRrOr;
@@ -240,13 +231,22 @@ Int_t firstMacro(){
       else {cout<<"\n... you think you're being funny ?\n\n\n\tYou. Aren't.\n\n";return 0;}
   }
   if (useFusionGates == true && (drawLengthVpeakHeight == false || drawLengthVtrackCharge == false || realignTracks == false)){
-      cout<<"\nWARNING\nFor now  please activate drawLengthVtrackCharge, drawLengthVpeakHeight & realignTracks to run useFusionGates. will patch later.\n\n";return 0;}
+      cout<<"\nWARNING\nFor now  please activate drawLengthVtrackCharge, drawLengthVpeakHeight & realignTracks to run useFusionGates.\n\n";
+      return 0;
+  }
   if (drawChargeVtac == true && drawLengthVtrackCharge == false){
-      cout<<"\nWARNING ! 'drawChargeVtac == true && drawLengthVtrackCharge == false' is not a supported combo.\nPlease correct.\n\nThank you kindly.\n";return 0;}
+      cout<<"\nWARNING ! 'drawChargeVtac == true && drawLengthVtrackCharge == false' is not a supported combo.\nPlease correct.\n\nThank you kindly.\n";
+      return 0;
+  }
   if (drawPeakHeightVtac == true && drawLengthVpeakHeight == false){
-      cout<<"\nWARNING ! 'drawPeakHeightVtac == true && drawLengthVpeakHeight == false' ain't no good. Sorry.\n";return 0;}
-  if ((draw3DTrack == true || drawDoubleProjectTrack == true) && realignTracks == false){cout<<"\nWell met, stranger. I hereby inform you that the options 'draw3DTrack' and 'drawDoubleProjectTrack' require option 'realignTracks' to be enabled, in order to be executed.\nThis message will now terminate your run.\n\nOur deepest apologies.\n";return 0;}
-
+      cout<<"\nWARNING ! Asking for 'drawPeakHeightVtac == true && drawLengthVpeakHeight == false' is not a supported combo.\nPlease correct.\n\nThank you kindly.\n";
+      return 0;
+  }
+  if ((draw3DTrack == true || drawDoubleProjectTrack == true) && realignTracks == false){
+      cout<<"\nWell met, stranger. I hereby inform you that the options 'draw3DTrack' and 'drawDoubleProjectTrack' require option 'realignTracks' to be enabled, in order to be executed.\nThis message will now terminate your run.\n\nOur deepest apologies.\n";
+      return 0;
+  }
+ //------------------------------------------------------------------------
 
 
 
@@ -258,14 +258,14 @@ Int_t firstMacro(){
   const char *fMapStreamChar;
   string fStreamName;
   int line = 0;
-  if (runOnTheCRC == true){fStreamName = "/afs/crc.nd.edu/user/m/mrenaud1/Public/SEP-pATTPC-analysis/TPC-SEP2019-fullMap.dat";}
-  else{fStreamName = "TPC-SEP2019-fullMap.dat";}
+  if (runOnTheCRC == true){fStreamName = "/afs/crc.nd.edu/user/m/mrenaud1/Public/SEP-pATTPC-analysis/requiredFiles/TPC-SEP2019-fullMap.dat";}
+  else{fStreamName = "requiredFiles/TPC-SEP2019-fullMap.dat";}
   fMapStreamChar = fStreamName.c_str(); //WARNING http://www.cplusplus.com/forum/general/100714/
   fstream mapStream(fMapStreamChar);
   if(mapStream.is_open()){//structure Cobo<< "\t" << Asad<< "\t" << Aget<< "\t" << Channel<< "\t" << PadNum << "\t" << xPos(mm) << "\t" << yPos(mm)
       while(mapStream>>mapp[line][0]>>mapp[line][1]>>mapp[line][2]>>mapp[line][3]>>mapp[line][4]>>mapp[line][5]>>mapp[line][6]){
           if (line == numberOfPads){
-          cout<<"\n\nWARNING !\nMore lines in the 'mapStream' than space in the 'mapp' matrix, there are.\nFucked up, you have.\nFix it, you should.\n";
+          cout<<"\n\nWARNING !\nThere are more lines in the 'mapStream' than space in the 'mapp' matrix.\nThis should be fixed.\n";
           return 0;
           }
           line++;
@@ -275,19 +275,20 @@ Int_t firstMacro(){
    cout<<"\nWarning ! Failed to open TPC-SEP2019-fullMap.dat, please start panicking at your earliest convenience.\n";
    return 0;
   }
+  mapStream.close();
   
   const int numberOfEnergies = 16;
   float fusionCharac[numberOfEnergies][4];
   const char *fCharacStreamChar;
-  if (runOnTheCRC == true){fStreamName = "/afs/crc.nd.edu/user/m/mrenaud1/Public/SEP-pATTPC-analysis/signal-Li8Ar40to48Sc.dat";}
-  else{fStreamName = "../ExpPrep/signal-Li8Ar40to48Sc.dat";}
+  if (runOnTheCRC == true){fStreamName = "/afs/crc.nd.edu/user/m/mrenaud1/Public/SEP-pATTPC-analysis/requiredFiles/signal-Li8Ar40to48Sc.dat";}
+  else{fStreamName = "requiredFiles/signal-Li8Ar40to48Sc.dat";}
   fCharacStreamChar = fStreamName.c_str(); //WARNING http://www.cplusplus.com/forum/general/100714/
   fstream characStream(fCharacStreamChar);
   line = 0;
   if ((useFusionGates == true || addSignalCharacOnPlots == true) && characStream.is_open()){//energy[kev], charge[% of BeamE], peakHeight[fraction of beam peak], dist travelled [estim., mm]
       while (characStream>>fusionCharac[line][0]>>fusionCharac[line][1]>>fusionCharac[line][2]>>fusionCharac[line][3]){
           if (line == numberOfEnergies){
-              cout<<"\n\nWARNING !\nMore lines in the 'characStream' than space in the 'fusionCharac' matrix, there are.\nFucked up, you have.\nFix it, you should.\n";
+              cout<<"\n\nWARNING !\nThere are more lines in the 'characStream' than space in the 'fusionCharac' matrix.\nThis should be fixed.\n";
               return 0;
           }
           line++;
@@ -297,6 +298,7 @@ Int_t firstMacro(){
       cout<<"\nWarning ! Failed to open signal-Li8Ar40To48Sc.dat, please start panicking at your earliest convenience.\n";
       return 0;
   }
+  characStream.close();
   
 
 
@@ -304,16 +306,25 @@ Int_t firstMacro(){
   //Definition of objects
   const char *fListChar;
   if (runOnTheCRC == true){
-	if (multiRunAnalysis == false) {fStreamName = "/afs/crc.nd.edu/user/m/mrenaud1/Public/SEP-pATTPC-analysis/list-preAnal.txt";}
-	else {fStreamName = "/afs/crc.nd.edu/user/m/mrenaud1/Public/SEP-pATTPC-analysis/list-analysis.txt";}
+	if (multiRunAnalysis == false) {fStreamName = "/afs/crc.nd.edu/user/m/mrenaud1/Public/SEP-pATTPC-analysis/requiredFiles/list-preAnal.txt";}
+	else {fStreamName = "/afs/crc.nd.edu/user/m/mrenaud1/Public/SEP-pATTPC-analysis/requiredFiles/list-analysis.txt";}
   }
   else{
-	if (multiRunAnalysis == false) {fStreamName = "list-preAnal.txt";}
-	else {fStreamName = "list-analysis.txt";}
+	if (multiRunAnalysis == false) {fStreamName = "requiredFiles/list-preAnal.txt";}
+	else {fStreamName = "requiredFiles/list-analysis.txt";}
   }
   fListChar = fStreamName.c_str(); //WARNING http://www.cplusplus.com/forum/general/100714/
   ifstream List(fListChar);
-
+  
+  const char *fListTACproblems;
+  if (runOnTheCRC == true){fStreamName = "/afs/crc.nd.edu/user/m/mrenaud1/Public/SEP-pATTPC-analysis/listOfTACproblemEvents.txt";}//create text file that will contain the run and event number for when 'globalNumberOfTACchannelIDproblems' is emitted
+  else {fStreamName = "listOfTACproblemEvents.txt";}
+  fListTACproblems = fStreamName.c_str(); //WARNING http://www.cplusplus.com/forum/general/100714/
+  ofstream ListTAC(fListTACproblems);
+  if (ListTAC.is_open() == false){
+      cout<<"\nWarning ! Failed to create or open listOfTACproblemEvents.txt, please start grumbling at your earliest convenience.\n";
+      return 0;
+  }
 
   string WhichFile;
   const char *FileName;
@@ -343,6 +354,7 @@ Int_t firstMacro(){
   TH2F* nbrOfPadsVtac;
   TH2F* nbrOfPadsVcharge;
   TH2F* nbrOfPadsVpeakHeight;
+  TH1F* deconvolutedProfile;
   
   timeBucketFormAveraged = new TH1F("TBFAv","Averaged channels;time bucket;Energy[arb.]",512,0,511);
   timeBucketFormAveraged->Fill(0.);
@@ -385,8 +397,8 @@ Int_t firstMacro(){
   if (drawNbrOfPadsVpeakHeight == true && substractBckgrd == true) nbrOfPadsVpeakHeight = new TH2F("padsVpeakHeight","#pads V. peak Height;#fired pads;max peak height [arb]",150,0,149,700,0,700);
   if (drawNbrOfPadsVpeakHeight == true && substractBckgrd == false) nbrOfPadsVpeakHeight = new TH2F("padsVpeakHeight","#pads V. peak Height;#fired pads;max peak height [arb]",150,0,149,1100,0,1100);
   if (drawNbrOfPadsVtac) nbrOfPadsVtac = new TH2F("padsVtac","#pads V. TAC;#fired pads;tac [arb]",150,0,149,850,0,850);
+  if (deconvoluteThis) deconvolutedProfile = new TH1F("deconvolutedProfile","Deconv. profile;time bucket;Energy[arb]",512,0,511);
 
-//   TH1F* timeBucketForm = new TH1F("TBF", "channel 1;time bucket;Energy[arb.]",512,0,511);
   
 
 /* Unused histograms
@@ -430,74 +442,57 @@ Int_t firstMacro(){
   TH1F* scalCh = new TH1F("scaler", "scaler thing use;Channel num.;#Count",16,0,16);
   			 scalCh->Fill(ch[j]);
   example of 3d hist: TH3F* S_QE = new TH3F("S_QE", "Signal avec QE;Y [m];Z [m];#hits", 8,-0.026,0.026, 8,-0.026,0.026,100,0,0.25);
+  
+  //   TH1F* timeBucketForm = new TH1F("TBF", "channel 1;time bucket;Energy[arb.]",512,0,511);
 */
 
-/*  //def of (de)convolute
-  float anArray1[16],anArray2[16],anArray3[32];
-  float dataTest[16];// {0.,0.00150362,0.018439,0.0835921,0.142119,0.0933979,0.00707567,0.000207203,2.26662e-06,1.07102e-08,1.95578e-08,2.6077e-08,2.98023e-08,0.0183157,0.00300689,0.00021422};
-  float responseTest[16] = {0.};
-  float answerTest[32] = {0.};
-  for (int i = 0;i<16;i++){
-//       if (i<8) responseTest[i] = TMath::Gaus(i,0,1);
-//       if (i>=8) responseTest[i] = 0.;
-//       if (i>=8 && i<16) responseTest[i] = TMath::Gaus(-16+i,0,1);
-      responseTest[i] = TMath::Gaus(i,7,2);
-      dataTest[i] = 0.;
-      anArray1[i] = i;
-      if (i<16) anArray2[i] = i;
+  //--DEFINITION OF (DE)CONVOLUTION USTENSILS-------------------------------------
+  float anArray1[lengthOfConvolArray],anArray3[lengthOfConvolArray], dataTest[lengthOfConvolArray], answerTest[2*lengthOfConvolArray];
+  if (deconvoluteThis){
+      for (int i = 0;i<lengthOfConvolArray;i++){
+//           dataTest[i] = 2.0*TMath::Gaus(i,91,6);
+          anArray1[i] = i;
+          anArray3[i] = i;
+//           anArray3[lengthOfConvolArray+i] = lengthOfConvolArray+i;
+      }
   }
-//   dataTest[2] = dataTest[4] = 1;
-  dataTest[7] = 4;
-  for (int i=0;i<32;i++){
-      cout<<endl<<"answerTest["<<i<<"] = "<<answerTest[i];
-      anArray3[i] = i;
-      if(i<16){cout<<",\tdataTest["<<i<<"] = "<<dataTest[i];}//dataTest2[i] = dataTest[i];
-      if(i<16){cout<<",\tresponseTest["<<i<<"] = "<<responseTest[i];}//responseTest2[i] = responseTest[i];
-  }
-  const float *theArray1 = anArray1;
-  const float *theArray2 = anArray2;
+  
+/*  const float *theArray1 = anArray1;
   const float *theArray3 = anArray3;
   const float *dataTest2 = dataTest;
-  const float *responseTest2 = responseTest;
-  TGraph* grD = new TGraph(16,theArray1,dataTest);
-  TGraph* grR = new TGraph(16,theArray2,responseTest2);
+  TGraph* grD = new TGraph(lengthOfConvolArray,anArray1,dataTest2);
   
-  cout<<endl<<endl<<endl;
-  convlv(dataTest,16,responseTest,16,1,answerTest);
-  for (int i=0;i<32;i++){
-      cout<<endl<<"answerTest["<<i<<"] = "<<answerTest[i];
-      if(i<16){cout<<",\tdataTest["<<i<<"] = "<<dataTest[i];}
-      if(i<16){cout<<",\tresponseTest["<<i<<"] = "<<responseTest[i];}
-  }
   cout<<endl;
+  convolution(dataTest,answerTest,1);
+  
   const float *answerTest2 = answerTest;
-  TGraph* grA = new TGraph(32,theArray3,answerTest2);
+  TGraph* grA = new TGraph(lengthOfConvolArray,anArray1,answerTest2);
   
   TCanvas* Ctestc = new TCanvas("Ctestc","Ctestc",600,600);
-  grA->SetLineColor(kGreen);
-  grA->Draw("AC*");
   grD->SetLineColor(kBlue);
-  grD->Draw("same");
-  grR->SetLineColor(kRed);
-  grR->Draw("same");
+  grD->Draw("AC");
+  grA->SetLineColor(kGreen);
+  grA->Draw("same");
   
-  return 0;
-  */
-  
-  
+  return 0;*/
+  //--END DEFINITION OF (DE)CONVOLUTION USTENSILS---------------------------------
   
   
-  //Def of variables /!\ mind that variable have to match for root extraction, storing Int_t->Double_t won't fly
+  
+  //--DEFINITION OF VARIABLES FOR TREE /!\ variable have to match for root extraction, storing Int_t->Double_t won't fly
   Int_t num_hits;
   Int_t whatChan;
   Int_t data[2055][517];
+  globalNumberOfEvents = 0;
   globalNumberErrors = 0;
   globalNumberOfPUevents = 0;
   globalNumberOfLongEvents = 0;
+  globalNumberOfTACchannelIDproblems = 0;
+  globalNumberOfMassiveEvents = 0;
   bool done = 0;
   Int_t auxChanDone = 0;
-  bool checkCleared = 0; //WARNING when 'noPileUp condition relaxed, this check will be a problem
-  Int_t doubleCheckPU = 0;
+  bool checkCleared = 0;                //WARNING when 'no PileUp' condition gets relaxed, this check will be a problem
+  Int_t doubleCheckPU = 0;              //stores calculated pile-up value for double checking event validity
   Double_t* daPeak;
   Int_t tacPeak;
   Double_t TACval = 0;
@@ -505,7 +500,7 @@ Int_t firstMacro(){
   Float_t storedDerivative[100], derivativeAverage[100];
   Int_t howManyInDerivArray = 0;
   Float_t maxDerivativePosition[2];
-  Float_t temp[3]; //variables for random use
+  Float_t temp[3];                      //variables for random use
   bool fusionTestValidated = 0;
   Float_t padsPosition[100][512][2];
   int checkTrack3D;
@@ -516,8 +511,8 @@ Int_t firstMacro(){
 
   while (List >> WhichFile){
 	
-	FileName = WhichFile.c_str(); //TFile needs conversion to char
-	if (FileName[0] != '*'){//filenames commented by adding a '*' in front won't be read
+   FileName = WhichFile.c_str(); //TFile needs conversion to char
+   if (FileName[0] != '*'){//NOTE filenames commented by adding a '*' in front won't be read
    cout<<"\nOpening next file, "<<FileName<<", processing...\n";
    
         
@@ -528,15 +523,16 @@ Int_t firstMacro(){
     tree->SetBranchAddress("br_len", &num_hits);
     tree->SetBranchAddress("myints", data);
     
-    //IMPORTANT! structure: Cobo<< "\t" << Asad<< "\t" << Aget<< "\t" << Channel<< "\t" << PadNum
+    //NOTE IMPORTANT! structure: Cobo<< "\t" << Asad<< "\t" << Aget<< "\t" << Channel<< "\t" << PadNum
     
-    
-    //Recursively go through tree, getting "Fill" after "Fill"findDerivative
-    
-    for (Int_t i=EVENT; i</*EVENT+1000*/tree->GetEntries(); i++){
+    //Recursively go through tree, getting "Fill" after "Fill"
+    for (Int_t i=EVENT; i</*EVENT+10000*/tree->GetEntries(); i++){
+        
+        globalNumberOfEvents++;
+        
         tree->GetEntry(i);
-        if (beQuite != 1) cout<<"\nEvent #"<<i<<", num_hits : "<<num_hits<<endl<<endl;
-        if (num_hits > 100){cout<<"\nWARNING, event "<<i<<"has too many entries.";globalNumberErrors++;}//TODO add error handeling
+        if (beQuiet != 1) cout<<"\nEvent #"<<i<<", num_hits : "<<num_hits<<endl<<endl;
+        if (num_hits-6 > 100){cout<<"\nWARNING, event "<<i<<" has too many entries.";globalNumberErrors++;globalNumberOfMassiveEvents++;}
         
         //resetting variables/histograms
         auxChanDone = 0;
@@ -553,8 +549,6 @@ Int_t firstMacro(){
             if (i<3) {temp[i] = 0;}
             if (i<2) {maxDerivativePosition[i] = 0;}
         }
-//         fill(storedDerivative,storedDerivative+100,0);
-//         fill(derivativeAverage,derivativeAverage+100,0);
         checkCleared = 0;
         howManyInDerivArray = 0; //how many non-zero entries in the array containing the derivative of the track
         doubleCheckPU = 0;
@@ -564,13 +558,11 @@ Int_t firstMacro(){
 
         
         //loop through channels in event
-        for (Int_t j=0; j<num_hits; j++) {
+        for (Int_t j=0; j<num_hits; j++) { //NOTE: num_hits = number of stored channels + 5 or 6 auxillary channels
             
             done = 0;
-//             for (int i=0;i<512;i++){padPositions[i][0] = 0.;padPositions[i][1] = 0.;}
             
             for (Int_t k=0; k<517; k++){
-                /*temp cout data    if (k%100==0){cout<<"\nnum_hits : "<<num_hits<<", data["<<j<<"]["<<k<<"] = "<<data[j][k];}*/
                 
                 if (done==0 && k == 4){//ID what the channel is 
                     if (data[j][0] < 2){
@@ -585,7 +577,6 @@ Int_t firstMacro(){
                     else {cout<<"\n*Posh british accent* I say, this is rather unexpected indeed old chap'...\n\tEntry num. : "<<i<<", j : "<<j<<", k : "<<k<<endl<<endl;return 0;}
                     whichChannel->SetBinContent(j,whatChan);
                     done=1;
-//                     cout<<"\n\twhichChannel here is : "<<data[j][k];
                 }// \end ID what the channel is
                 if (done==1 && k>4 && data[j][0] != 2){//fill in time bucket format for non-auxillary channels
                     if (fillIndividualChannels == true && j<100){timeBucketForm[j]->SetBinContent(k-5,data[j][k]);}
@@ -595,8 +586,8 @@ Int_t firstMacro(){
                     timeBucketFormAuxillary[auxChanDone]->SetBinContent(k-5,data[j][k]);
                     if(k==516){auxChanDone++;} //move to next histogram
                 }
-                else if(auxChanDone >= 6){cout<<"\nError, which is sad.\nAnd 'sad' backwards is 'das', and das not good...\nLook at the Auxillaries.\n";return 0;}
-                if (k>5 && projectionTrackLimit <10 && (draw3DTrack == true || drawDoubleProjectTrack == true) /*&& did3DtrackGetMade == false*/ && num_hits <100){
+                else if(auxChanDone >= 6){cout<<"\nError, which is sad.\nAnd 'sad' backwards is 'das', and das not good...\nLook at the Auxillaries.\n";if (trackBizarTACevents == true){ListTAC<<WhichFile<<"\t"<<i<<endl;} return 0;}
+                if (k>5 && projectionTrackLimit <10 && (draw3DTrack == true || drawDoubleProjectTrack == true) /*&& did3DtrackGetMade == false*/ && num_hits-6 <100){
                     padsPosition[j][k-4][0] = mapp[checkTrack3D][5];
                     padsPosition[j][k-4][1] = mapp[checkTrack3D][6];
                 }
@@ -604,57 +595,65 @@ Int_t firstMacro(){
         }
         
         //section to see if event has pile-up & attempt clean-up/renorm
-        temp[0] = whichAuxChanIsTAC(timeBucketFormAuxillary[1]);
+        num_hits = num_hits-(auxChanDone+1); //remove the auxillary channels from counting the number of fired pads
+        temp[0] = whichAuxChanIsTAC(timeBucketFormAuxillary[1], beQuiet);
+        if (temp[0] == 3){ //keeps track of events with problematic TAC or MCP in separate file
+            if (trackBizarTACevents == true){ ListTAC<<WhichFile<<"\t"<<i<<endl;}
+            temp[0] = 2;
+        }
         Int_t pileUpInEvent = pileUp(timeBucketFormAuxillary[(int)temp[0]]);
-        if (beQuite != 1)cout<<"TAC is in aux. chan. "<<temp[0]<<endl;
-        if (beQuite != 1)cout<<"#ofEvents : "<<pileUpInEvent;
-        if (pileUpInEvent == 1){ if (beQuite != 1) cout<<"\t-> Accepted"<<endl;}
-        else {if (beQuite != 1){cout<<"\t-> Rejected"<<endl<<endl;} globalNumberOfPUevents++;}
+        if (beQuiet != 1)cout<<"TAC is in aux. chan. "<<temp[0]<<endl;
+        if (beQuiet != 1)cout<<"#ofEvents : "<<pileUpInEvent;
+        if (pileUpInEvent == 1){ if (beQuiet != 1) cout<<"\t-> Accepted"<<endl;}
+        else {if (beQuiet != 1){cout<<"\t-> Rejected"<<endl<<endl;} globalNumberOfPUevents++;}
         
-        if (done == 1 && pileUpInEvent == 1){//if at end of event+event was clean && no pile-up, perform last check; then add the average to the signal
+        if (done == 1 && pileUpInEvent == 1){//if at end of event, and event was clean && no pile-up, perform last check; then add the average to the signal
             preTBF->Add(timeBucketFormAveraged);
-            daPeak = locateTACsignal(timeBucketFormAveraged, pileUpInEvent+2);
-            if (beQuite != 1) cout<<"Watch : "<<daPeak[0]<<"\t"<<daPeak[1]<<"\t"<<daPeak[2]<<endl;
+            daPeak = locateTACsignal(timeBucketFormAveraged, pileUpInEvent+2); //stores position of peaks found in the averaged TimeBucket-stored output
+            if (beQuiet != 1) cout<<"Watch : "<<daPeak[0]<<"\t"<<daPeak[1]<<"\t"<<daPeak[2]<<endl;
             for (int j=0;j<pileUpInEvent+2;j++){
                 if (daPeak[j] >=1 && daPeak[j] <= 513){doubleCheckPU++;}
-                else if (daPeak[j] >= 513){daPeakElement++;}//if you're here the real peak you wantnot the first, so go fetch next entry, not the first "peak" -> daPeak[daPeakElement] instead of daPeak[0]
+                else if (daPeak[j] >= 513){daPeakElement++;}//if you're here the real peak you want is not the first, so go fetch next entry, not the first "peak" -> daPeak[daPeakElement] instead of daPeak[0]
             }
             
             //Double-check pileUp
             if (pileUpInEvent == doubleCheckPU){
                 if (acceptPeaksBelowBeam == true){checkCleared = 1;}
                 else if (acceptPeaksBelowBeam == false && daPeak[daPeakElement] > pointOfPeakRejection){checkCleared =1;}
-                else {if (beQuite != 1) {cout<<"\n\tWARNING ! Peak beyond rejection point.\t-> Rejected"<<endl<<endl;} globalNumberErrors++;globalNumberOfLongEvents++;}
+                else {if (beQuiet != 1) {cout<<"\n\tWARNING ! Peak beyond rejection point.\t-> Rejected"<<endl<<endl;} globalNumberErrors++;globalNumberOfLongEvents++;}
             }
-            else if (doubleCheckPU == 0){if (beQuite != 1) {cout<<"\n\tWARNING ! No signal !\t-> Rejected"<<endl<<endl;} globalNumberErrors++;}
+            else if (doubleCheckPU == 0){if (beQuiet != 1) {cout<<"\n\tWARNING ! No signal !\t-> Rejected"<<endl<<endl;} globalNumberErrors++;}
             else{
-                if (beQuite != 1){cout<<"\n\tWARNING ! Multiple peaks for one TAC signal !\t-> Rejected"<<endl<<endl;}
+                if (beQuiet != 1){cout<<"\n\tWARNING ! Multiple peaks for one TAC signal !\t-> Rejected"<<endl<<endl;}
                 globalNumberErrors++;
                 globalNumberOfPUevents++;
             }
             
             //Get TAC value
             tacPeak = timeBucketFormAuxillary[(int)temp[0]]->GetMaximumBin();
-            TACval = timeBucketFormAuxillary[(int)temp[0]]->GetBinContent(tacPeak) - timeBucketFormAuxillary[(int)temp[0]]->GetBinContent(tacPeak-6);
-            if (beQuite != 1) cout<<"TAC position : "<<tacPeak<<"\tTAC value : "<<TACval<<endl;
+            TACval = timeBucketFormAuxillary[(int)temp[0]]->GetBinContent(tacPeak) - timeBucketFormAuxillary[(int)temp[0]]->GetBinContent(tacPeak-6); //get peak height, substract baseline
+            if (beQuiet != 1) cout<<"TAC position : "<<tacPeak<<"\tTAC value : "<<TACval<<endl;
             
-            
+            //check number of fired Pads
+            if (usePadsGates == true && (num_hits > maxNbrOfPadsFired)){
+                checkCleared = 0;
+                if (beQuiet != 1){cout<<"\n\tWARNING ! Too many fired pads : "<<num_hits<<" > "<<maxNbrOfPadsFired<<".\t-> Rejected"<<endl<<endl;}
+            }
             
             if (checkCleared == 1){//actual clean & treatement
                 temp[0]=0;
                 //fit noise before track and substract it.
-                if (beQuite != 1) cout<<"location of peaks : "<<daPeak[daPeakElement]<<endl;
+                if (beQuiet != 1) cout<<"location of peaks : "<<daPeak[daPeakElement]<<endl;
                 TF1 *fa0 = new TF1("fa0", "pol0(0)",5,daPeak[daPeakElement]-20);
                 timeBucketFormAveraged->Fit(fa0,"RQ"); //fit options: no draw, limited range, quiet
                 if (drawLengthVbackgrd) temp[2] = fa0->GetParameter(0);
-                if (beQuite != 1) cout<<"fa0->GetParameter(0) = "<<fa0->GetParameter(0)<<endl;
+                if (beQuiet != 1) cout<<"fa0->GetParameter(0) = "<<fa0->GetParameter(0)<<endl;
                 fa0->SetRange(0,511);
                 if (substractBckgrd){preTBF->Add(fa0,-1,"");}
                 preTBF->SetBinContent(0,0);
                 
                 //locate start of track and substract after track noise
                 for (int bin=0;bin<(511.-daPeak[daPeakElement])/5.;bin++){//use the derivative of the track signal to help ID the end (sharp drop)
-//                     cout<<daPeak[daPeakElement]+bin*5<<"\t"<<findDerivative(preTBF,daPeak[daPeakElement]+bin*5,derivativeCalcWindowSize)<<endl;
                     storedDerivative[bin] = findDerivative(preTBF,daPeak[daPeakElement]+bin*5,derivativeCalcWindowSize);
                     whatsTheDerivative->SetBinContent(daPeak[daPeakElement]+bin*5,storedDerivative[bin]);
                     howManyInDerivArray++;
@@ -663,24 +662,21 @@ Int_t firstMacro(){
                 preTBF->Fit(fa0,"RQ");
                 if (drawLengthVbackgrd == true && substractBckgrd == true) temp[2] += fa0->GetParameter(0);
                 else if (drawLengthVbackgrd == true && substractBckgrd == false) temp[2] = fa0->GetParameter(0);
-                if (beQuite != 1) cout<<"fa0->GetParameter(0), v2 = "<<fa0->GetParameter(0)<<endl;
+                if (beQuiet != 1) cout<<"fa0->GetParameter(0), v2 = "<<fa0->GetParameter(0)<<endl;
                 for (int j=daPeak[daPeakElement];j<511;j++){
                     if (preTBF->GetBinContent(j) <= max(fa0->GetParameter(0)*1.5,7.)){
-//                         cout<<"\nj : "<<j;
                         for (int u=0; u<howManyInDerivArray-3; u++){
-//                             cout<<u<<"\t"<<storedDerivative[u]<<"\t"<<AveragE(storedDerivative,3,3+u)<<endl; 
                             derivativeAverage[u]=AveragE(storedDerivative,3,3+u); //TODO optimise this section ! too many loops !
                         }
                         break;
                     }
                 }
                 
-                for (int p = howManyInDerivArray-3;p>0;p--){
-                    if (derivativeAverage[p] < -1.01){
-                        if (beQuite != 1) cout<<"tentative : "<<p<<"\t"<<daPeak[daPeakElement]+(p+1)*5<<endl; //p +1(for stepping) 
-                        fa0->SetRange(daPeak[daPeakElement]+(p+1)*5+10,505);
+                for (int p = howManyInDerivArray-3;p>0;p--){// <- start from end of array
+                    if (derivativeAverage[p] < -1.01){ // <- gives start of track
+                        if (beQuiet != 1) cout<<"tentative : "<<p<<"\t"<<daPeak[daPeakElement]+(p+1)*5<<endl; //p +1(for stepping) 
+                        fa0->SetRange(daPeak[daPeakElement]+(p+1)*5+10,505); // <- select plateau at the end of the time bucket form
                         preTBF->Fit(fa0,"RQ");
-//                         cout<<"fa0->GetParameter(0), v3 = "<<fa0->GetParameter(0)<<endl;
                         fa0->SetRange(0,511);
                         if (substractBckgrd){preTBF->Add(fa0,-1.01,"");}
                         
@@ -697,15 +693,17 @@ Int_t firstMacro(){
                                     temp[1] = 1000000.; //break
                                 }
                             }
-                            if (beQuite != 1) cout<<"\nmaxDerivativePosition[0] = "<<maxDerivativePosition[0]<<", maxDerivativePosition[1] = "<<maxDerivativePosition[1]<<endl; //respectively position of start and end of track
+                            if (beQuiet != 1) cout<<"\nmaxDerivativePosition[0] = "<<maxDerivativePosition[0]<<", maxDerivativePosition[1] = "<<maxDerivativePosition[1]<<endl; //respectively position of start and end of track
                             
-//                             cout<<"\n\t\tNotice me Senpai !\n"; 
                             
                             if (drawLengthVbackgrd) lengthVbackground->Fill(maxDerivativePosition[0]+estimatedWidth-maxDerivativePosition[1],temp[2]); //temp[2] holds the background/baseline
                             
                             if (drawLengthVpeakHeight){
-                                if (useFusionGates == false){lengthVSheight->Fill((maxDerivativePosition[0]+estimatedWidth-maxDerivativePosition[1]),preTBF->GetMaximum());}
-                                else {
+                                if (useFusionGates == false){
+                                    lengthVSheight->Fill((maxDerivativePosition[0]+estimatedWidth-maxDerivativePosition[1]),preTBF->GetMaximum());
+                                    if (drawPeakHeightVtac){peakHeightVtac->Fill(preTBF->GetMaximum(),TACval);}
+                                }
+                                else {//NOTE: Only keep events compatible with theoretical peak height. 
                                     for (line=15;line>=0;line--){
                                         if ((maxDerivativePosition[0]+estimatedWidth-maxDerivativePosition[1]) <= fusionCharac[line][3]/(driftV*timeBucketSize)){
                                             fusionTestValidated = 1;
@@ -714,10 +712,12 @@ Int_t firstMacro(){
                                         }
                                         globalNumberOfLongEvents++;
                                     }
-                                    //current condition : >=90% of calculated peak height, and <=110% of calculated charge
-                                    if (fusionTestValidated == true && temp[0]<92.545455*(maxDerivativePosition[0]+estimatedWidth-maxDerivativePosition[1])-755.81819){lengthVSheight->Fill(maxDerivativePosition[0]+estimatedWidth-maxDerivativePosition[1],preTBF->GetMaximum());}
+                                    //WARNING hard-coded most conditions/gates. Current condition : <=92.5% of calculated charge
+                                    if (fusionTestValidated == true && temp[0]<92.545455*(maxDerivativePosition[0]+estimatedWidth-maxDerivativePosition[1])-755.81819){
+                                        lengthVSheight->Fill(maxDerivativePosition[0]+estimatedWidth-maxDerivativePosition[1],preTBF->GetMaximum());
+                                    }
+                                    if (drawPeakHeightVtac){peakHeightVtac->Fill(preTBF->GetMaximum(),TACval);}
                                 }
-                                if (drawPeakHeightVtac){peakHeightVtac->Fill(preTBF->GetMaximum(),TACval);}
                             }
                             
                             if (drawLengthVtrackCharge){
@@ -725,7 +725,7 @@ Int_t firstMacro(){
                                 else {
                                     if (fusionTestValidated == true && temp[0]<92.545455*(maxDerivativePosition[0]+estimatedWidth-maxDerivativePosition[1])-755.81819){
                                         lengthVScharge->Fill(maxDerivativePosition[0]+estimatedWidth-maxDerivativePosition[1],preTBF->Integral/*AndError*/(maxDerivativePosition[1],maxDerivativePosition[0]+estimatedWidth,""));
-                                    }
+                                     }
                                 }
                                 if (drawChargeVtac){chargeVtac->Fill(preTBF->Integral/*AndError*/(maxDerivativePosition[1],maxDerivativePosition[0]+estimatedWidth,""),TACval);}
                             }
@@ -744,7 +744,7 @@ Int_t firstMacro(){
                                 draw3DTrack = false;
                             }
                             else if (draw3DTrack == true && num_hits >= 100){
-                                if (!beQuite) cout<<"\nWARNING ! Event incompatible with 'draw3DTrack' option. Dropping option.\n";
+                                if (!beQuiet) cout<<"\nWARNING ! Event incompatible with 'draw3DTrack' option. Dropping option.\n";
                                 draw3DTrack = false; //TODO change to allow for next track to be selected
                             }
                             
@@ -762,6 +762,12 @@ Int_t firstMacro(){
                             if (drawNbrOfPadsVtac){ nbrOfPadsVtac->Fill(num_hits,TACval);}
                             if (drawNbrOfPadsVpeakHeight){ nbrOfPadsVpeakHeight->Fill(num_hits,preTBF->GetMaximum());}
                             
+                            if (deconvoluteThis){
+                                for (int i=maxDerivativePosition[1];i<maxDerivativePosition[0]+estimatedWidth-maxDerivativePosition[1];i++){
+                                    
+                                }
+                            }
+                            
                         }// END 'realignTracks'
                         else if (drawLengthVpeakHeight == true && realignTracks == false){
 //                             cout<<"On fill LVPH avec : "<<(daPeak[daPeakElement]+(p+1)*5-(daPeak[daPeakElement]-10))<<"\t"<<preTBF->GetMaximum()<<endl;
@@ -777,8 +783,9 @@ Int_t firstMacro(){
                         if (realignTracks == false && drawNbrOfPadsVcharge == true){nbrOfPadsVcharge->Fill(num_hits,preTBF->Integral/*AndError*/(daPeak[daPeakElement]-10,daPeak[daPeakElement]+(p+1)*5,""));}
                         if (realignTracks == false && drawNbrOfPadsVpeakHeight == true){nbrOfPadsVpeakHeight->Fill(num_hits,preTBF->GetMaximum());}
                         if (realignTracks == false && drawNbrOfPadsVtac == true){nbrOfPadsVtac->Fill(num_hits,TACval);}
+
                         
-                        p = 1; //break;
+                        p = 1; //break out of the "for (int p = howManyInDerivArray-3;p>0;p--)" loop
                     }
                 }
                 
@@ -814,33 +821,18 @@ Int_t firstMacro(){
         
     } // END of loop through events
    } // END if("file.is_open()")
-   else {cout << "\n\nWARNING ! FAILED TO OPEN FILE "<<WhichFile<<", ABORTING.\nNow go and find out where you messed up. You prick.\n\n";break;return 0;}
+   else {cout << "\n\nWARNING ! FAILED TO OPEN FILE "<<WhichFile<<", ABORTING.\nYou should go find out what happened.\n\n";break;return 0;}
    
    
    file->Close();
    delete file;
    
    
-   }//FileName not *-ed
-  }//while loop
+   }//ENDFileName not '*'-ed
+  }//ENDwhile loop
   
-  //Def of projections
-  
-
-  
-  
-  //Def fit fonction
-/*  //Step-function convolution
-  Float_t ampli = 50.;
-  Float_t posi = 500.;
-  TF1 *steppy = new TF1("steppy",the_steppar,0,512,2);
-  steppy->SetParameter(0,ampli);
-  steppy->SetParameter(1,posi);
-  TF1 *detResp = new TF1("detResp",the_gausppar,0,512,3);
-  detResp->SetParameter(2,1./timeBucketSize);
-  TF1Convolution *step_conv = new TF1Convolution(steppy,detResp,485,512,true); 
-  TF1* f_conv = new TF1("f_conv",*step_conv,485,512,step_conv->GetNpar());
-  // END step-function*/
+  List.close();
+  ListTAC.close();
   
   
   
@@ -855,7 +847,7 @@ Int_t firstMacro(){
   
   //save path definition
   string fStreamNameS;
-  if (runOnTheCRC == false){fStreamName = "/home/mrenaud1/Documents/Li8Analysis/requestedGraphs/autoSaved-";}
+  if (runOnTheCRC == false){fStreamName = "/home/maxime/Documents/Assistanat-KUL/Halo_Reactions-thesis/ExpNDSEP/Li8analysis/requestedGraphs/autoSaved-padTest-";}
   else {fStreamName = "/afs/crc.nd.edu/user/m/mrenaud1/Public/stockageGraphAnal/autoSaved-";}
   //prepare for point additions
   float_t ptx[numberOfEnergies], pty[numberOfEnergies], ptz[numberOfEnergies];
@@ -919,12 +911,18 @@ Int_t firstMacro(){
   
   if (drawAuxillaryChannels){
     TCanvas* CauxChan = new TCanvas("CauxChan","CauxChan",800,800);
-        CauxChan->Divide(2,3);
+        CauxChan->Divide(3,3);
         CauxChan->ToggleEventStatus();
         for (unsigned int divNumb=1;divNumb<7;divNumb++){
             CauxChan->cd(divNumb);
             timeBucketFormAuxillary[divNumb-1]->Draw();
         }
+	if (saveHistograms){
+	    fStreamNameS = fStreamName + "timeBucketFormAuxillary.root";
+	    const char *nameCauxChan = fStreamNameS.c_str(); //WARNING http://www.cplusplus.com/forum/general/100714
+	    CauxChan->SaveAs(nameCauxChan);
+	    delete CauxChan;
+	}
   }
   else {delete *timeBucketFormAuxillary;}
   
@@ -1148,9 +1146,11 @@ Int_t firstMacro(){
         }
   }
     
- cout<<"\n\nEnd of program reached, encountered "<<globalNumberErrors<<" non-terminal errors.\nThere were "<<globalNumberOfPUevents<<" rejected pile-up events.\nThere were "<<globalNumberOfLongEvents<<" rejected long events.\n";
- delete preTBF;
+ cout<<"\n\nEnd of program reached, handled "<<globalNumberOfEvents<<" events.\nEncountered "<<globalNumberErrors<<" non-terminal errors ("<<100.*globalNumberErrors/globalNumberOfEvents<<"% of total).\nThere were "<<globalNumberOfPUevents<<" rejected pile-up events ("<<100.*globalNumberOfPUevents/globalNumberOfEvents<<"% of total).\nThere were "<<globalNumberOfLongEvents<<" rejected long events ("<<100.*globalNumberOfLongEvents/globalNumberOfEvents<<"% of total).\nThere were "<<globalNumberOfTACchannelIDproblems<<" events with unexpected TAC channel behaviour ("<<100.*globalNumberOfTACchannelIDproblems/globalNumberOfEvents<<"% of total).\nThere were "<<globalNumberOfMassiveEvents<<" events with over a 100 fired channels ("<<100.*globalNumberOfMassiveEvents/globalNumberOfEvents<<"% of total).\n";
+ 
+ 
  if (saveHistograms){
+     //TODO do you need the 'if's here ? shouldn't every object get deleted regardless ?
      if (drawAuxillaryChannels){ for (unsigned int divNumb=0;divNumb<6;divNumb++){ delete timeBucketFormAuxillary[divNumb];}}
      if (drawTBFeventRemanent){ delete TBFeventRemanent;}
      if (realignTracks){  delete TBFrealigned;}
@@ -1168,10 +1168,11 @@ Int_t firstMacro(){
      if (drawNbrOfPadsVcharge){delete nbrOfPadsVcharge;}
      if (drawNbrOfPadsVpeakHeight){delete nbrOfPadsVpeakHeight;}
      if (drawNbrOfPadsVtac){delete nbrOfPadsVtac;}
+     delete preTBF;
      gApplication->Terminate();
  }
  return 0;
   
 }
 
-// /afs/crc.nd.edu/user/m/mrenaud1/Public/stockageGraphAnal/    /home/mrenaud1/Documents/Li8Analysis/requestedGraphs/
+// /afs/crc.nd.edu/user/m/mrenaud1/Public/stockageGraphAnal/  

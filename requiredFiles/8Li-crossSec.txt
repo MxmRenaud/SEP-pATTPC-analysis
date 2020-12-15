@@ -1,0 +1,123 @@
+8Li + 40Ar -> 48Sc (t1/2 = 43.76h)
+
+- fusion radius: 8.85 fm 
+- fusion barrier: 8.06 MeV
+
+At 6 MeV (5 CM) : 0.39 mb			PACE4 recoil Energy : 1 MeV
+At 7 MeV (5.83 CM) : 1.91 mb		PACE4 recoil Energy : 1.167 MeV
+At 8 MeV (6.67 CM) : 9.38 mb		PACE4 recoil Energy : 1.333 MeV
+At 9 MeV (7.5 CM) : 42.63 mb		PACE4 recoil Energy : 1.5 MeV
+At 10 MeV (8.33 CM) : 144.3 mb	PACE4 recoil Energy : 1.667 MeV
+At 11 MeV (9.17 CM) : 306.6 mb	PACE4 recoil Energy : 1.833 MeV
+At 12 MeV (10 CM) : 469.1 mb		PACE4 recoil Energy : 2 MeV
+At 13 MeV (10.83 CM) : 608.3 mb	PACE4 recoil Energy : 2.167 MeV
+At 14 MeV (11.67 CM) : 724.6 mb	PACE4 recoil Energy : 2.333 MeV
+At 15 MeV (12.5 CM) : 822.2 mb	PACE4 recoil Energy : 2.5 MeV
+At 16 MeV (13.33 CM) : 904.8 mb	PACE4 recoil Energy : 2.667 MeV
+At 17 MeV (14.17 CM) : 975.2 mb	PACE4 recoil Energy : 2.833 MeV
+At 18 MeV (15 CM) : 1036 mb.		PACE4 recoil Energy : 3 MeV
+At 19 MeV (15.83 CM) : 1088 mb	PACE4 recoil Energy : 3.167 MeV
+At 20 MeV (16.67 CM) : 1133 mb	PACE4 recoil Energy : 3.333 MeV
+-----
+At 21 MeV (17.5 CM) : 1172 mb		PACE4 recoil Energy : 3.5 MeV
+At 22 MeV (18.33 CM) : 1206 mb	PACE4 recoil Energy : 3.667 MeV
+At 23 MeV (19.17 CM) : 1236 mb	PACE4 recoil Energy : 3.833 MeV
+At 24 MeV (20 CM) : 1262 mb		PACE4 recoil Energy : 4 MeV
+At 25 MeV (20.83 CM) : 1285 mb	PACE4 recoil Energy : 4.167 MeV
+At 26 MeV (21.67 CM) : 1305 mb	PACE4 recoil Energy : 4.333 MeV
+At 27 MeV (22.5 CM) : 1322 mb		PACE4 recoil Energy : 4.5 MeV
+At 28 MeV (23.33 CM) : 1338 mb	PACE4 recoil Energy : 4.667 MeV
+At 29 MeV (24.17 CM) : 1351 mb	PACE4 recoil Energy : 4.833 MeV
+At 30 MeV (25 CM) : 1363 mb		PACE4 recoil Energy : 5 MeV
+
+
+
+7Li + 40Ar -> 47Sc (t1/2 = 3.35d)
+
+- fusion radius: 7.75 fm 
+- fusion barrier: 8.20 MeV
+
+At 6 MeV  (5.11 CM)  : 0.34 mb   PACE4 recoil Energy : 0.89 MeV
+At 7 MeV  (5.96 CM)  : 1.728 mb  PACE4 recoil Energy : 1.043 MeV
+At 8 MeV  (6.81 CM)  : 8.789 mb  PACE4 recoil Energy : 1.191 MeV
+At 9 MeV  (7.66 CM)  : 41.3 mb   PACE4 recoil Energy : 1.34 MeV
+At 10 MeV (8.51 CM)  : 141.8 mb  PACE4 recoil Energy : 1.489 MeV
+At 11 MeV (9.36 CM)  : 300.3 mb  PACE4 recoil Energy : 1.638 MeV
+At 12 MeV (10.21 CM) : 456.4 mb  PACE4 recoil Energy : 1.787 MeV
+At 13 MeV (11.06 CM) : 589.3 mb  PACE4 recoil Energy : 1.936 MeV
+At 14 MeV (11.91 CM) : 700.1 mb  PACE4 recoil Energy : 2.085 MeV
+At 15 MeV (12.77 CM) : 793 mb    PACE4 recoil Energy : 2.234 MeV
+At 16 MeV (13.62 CM) : 871.4 mb  PACE4 recoil Energy : 2.383 MeV
+At 17 MeV (14.47 CM) : 938 mb    PACE4 recoil Energy : 2.532 MeV
+At 18 MeV (15.32 CM) : 995.2 mb  PACE4 recoil Energy : 2.681 MeV
+At 19 MeV (16.17 CM) : 1044 mb   PACE4 recoil Energy : 2.83 MeV
+At 20 MeV (17.02 CM) : 1087 mb   PACE4 recoil Energy : 2.97 MeV
+
+
+8Li + 1H -> 9Be (stable)
+
+ - fusion radius: 5.10 fm
+ - Fusion barrier: 0.58 MeV
+ 
+At 3 MeV (0.33 CM) : 829.3 mb		PACE4 recoil energy : 2.667 MeV
+At 4 MeV (0.44 CM) : 742.6 mb		PACE4 recoil energy : 3.556 MeV
+At 5 MeV (0.56 CM) : 702.4 mb		PACE4 recoil energy : 4.444 MeV
+At 6 MeV (0.67 CM) : 685.8 mb		PACE4 recoil energy : 5.333 MeV
+At 7 MeV (0.78 CM) : 682 mb		PACE4 recoil energy : 6.222 MeV
+At 8 MeV (0.89 CM) : 685.4 mb		PACE4 recoil energy : 7.111 MeV
+At 9 MeV (1 CM) : 693.1 mb		PACE4 recoil energy : 8 MeV
+At 10 MeV (1.11 CM) : 702.8 mb		PACE4 recoil energy : 8.889 MeV
+At 11 MeV (1.22 CM) : 714.3 mb		PACE4 recoil energy : 9.778 MeV
+At 12 MeV (1.33 CM) : 723.9 mb		PACE4 recoil energy : 10.667 MeV
+At 13 MeV (1.44 CM) : 733.8 mb		PACE4 recoil energy : 11.556 MeV
+At 14 MeV (1.56 CM) : 742.7 mb		PACE4 recoil energy : 12.444 MeV
+At 15 MeV (1.67 CM) : 750.5 mb		PACE4 recoil energy : 13.333 MeV
+At 16 MeV (1.78 CM) : 757 mb		PACE4 recoil energy : 14.222 MeV
+At 17 MeV (1.89 CM) : 762.3 mb		PACE4 recoil energy : 15.111 MeV
+At 18 MeV (2 CM) : 766.4 mb		PACE4 recoil energy : 16 MeV
+At 19 MeV (2.11 CM) : 769.5 mb		PACE4 recoil energy : 16.889 MeV
+At 20 MeV (2.22 CM) : 774 mb		PACE4 recoil energy : 17.778 MeV
+
+
+
+
+
+
+
+
+4He + 40Ar -> 44Ca (stable)
+
+ - fusion radius: 8.30 fm
+ - Fusion barrier: 5.67 MeV
+ 
+At 3 MeV (2.73 CM) : 0.8 mb
+At 4 MeV (3.64 CM) : 4 mb
+At 5 MeV (4.54 CM) : 20.7 mb
+At 6 MeV (5.45 CM) : 93.8 mb
+At 7 MeV (6.36 CM) : 268.7 mb
+At 8 MeV (7.27 CM) : 470.8 mb
+At 9 MeV (8.18 CM) : 636.6 mb
+At 10 MeV (9.09 CM) : 764.3 mb
+At 11 MeV (10 CM) : 863.2 mb
+At 12 MeV (10.91 CM) : 940.7 mb
+At 13 MeV (11.82 CM) : 1002 mb
+At 14 MeV (12.73 CM) : 1052 mb
+At 15 MeV (13.64 CM) : 1091 mb
+At 16 MeV (14.55 CM) : 1123 mb
+At 17 MeV (15.45 CM) : 1149 mb
+At 18 MeV (16.36 CM) : 1170 mb
+At 19 MeV (17.27 CM) : 1186 mb
+At 20 MeV (18.18 CM) : 1190 mb
+
+
+
+
+4He + 1H -> 6Li (stable)
+
+ - fusion radius: 1.75 fm
+ - Fusion barrier: 0.47 MeV
+ 
+Nothing below 10 MeV
+At 10 MeV (2 CM) : 496.5 mb
+At 15 MeV (3 CM) : 363.1 mb
+At 20 MeV (? CM) : 296.4 mb
