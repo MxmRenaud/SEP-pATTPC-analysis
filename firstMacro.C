@@ -161,7 +161,6 @@ float AveragE(Float_t a[], int n, int start){
 
 //=================================================================================================================================
 
-
 Int_t firstMacro(){  
     
 //END---------WHAT DO Y0U WISH TO DO HERE, MORTAL ? -------------------
@@ -477,7 +476,6 @@ Int_t firstMacro(){
   
   return 0;*/
   //--END DEFINITION OF (DE)CONVOLUTION USTENSILS---------------------------------
-  
   
   
   
@@ -843,7 +841,7 @@ Int_t firstMacro(){
 
   //Defining style of graph
   gStyle->SetOptTitle(0);
-  gStyle->SetOptStat(1111111);//now showing integral under-and-overflow !
+  gStyle->SetOptStat(1111111);//now showing integral under-and-overflow ! //old: 1001110
   gStyle->SetOptFit(1);
   gStyle->ToggleEventStatus();
   
